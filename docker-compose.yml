@@ -2,26 +2,54 @@ version: "3.8"
 
 services:
   ytb-dl:
+    # GitHub Actions 构建并推送到 GHCR 的镜像。
     image: ghcr.io/zipenok/ytb-dl:latest
     container_name: ytb-dl
+
+    # 每次启动/更新时优先检查远端镜像。群晖 Container Manager 支持 Compose v2 时可用。
     pull_policy: always
     restart: unless-stopped
+
+    # 左侧端口是宿主机端口；如果 9832 被占用，可以改成 "19832:9832"。
     ports:
       - "9832:9832"
+
     environment:
+      # 容器时区。
       TZ: Asia/Shanghai
+
+      # yt-dlp 在线更新后会安装到 /app/config/python-packages，下面两项让 Python 优先加载更新后的版本。
       PYTHONPATH: /app/config/python-packages:/app
-      PYTHONUNBUFFERED: "1"
       YTDLP_UPDATE_DIR: /app/config/python-packages
+
+      # 实时输出日志，方便 docker compose logs 查看。
+      PYTHONUNBUFFERED: "1"
+
+      # 宿主机下载目录显示路径，用于 Telegram 完成通知里的文件路径。
+      # 群晖建议改成：/volume1/Nas/downloads/youtube
       HOST_DOWNLOAD_PATH: ./downloads
+
+      # Web 登录账号。首次部署务必修改密码。
       WEB_AUTH_USERNAME: admin
       WEB_AUTH_PASSWORD: change-this-password
+
+      # API Token 给暴力猴脚本、远程推送和自动化调用使用。
       API_TOKEN: change-this-api-token
+
+      # Session 签名密钥，建议填一串随机长字符串。
       AUTH_SECRET: change-this-session-secret
+
+      # 让容器优先使用持久化目录里的可执行文件和虚拟环境。
       PATH: /app/config/bin:/opt/venv/bin:/usr/local/bin:/usr/bin:/bin
+
     volumes:
+      # 下载目录。群晖示例：/volume1/Nas/downloads/youtube:/app/downloads
       - ./downloads:/app/downloads
+
+      # 配置目录，保存 config.json、auth.json、cookies.txt 和在线更新的 yt-dlp。
+      # 群晖示例：/volume1/docker/ytb-dl/config:/app/config
       - ./config:/app/config
+
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- --tries=1 --timeout=10 http://localhost:9832/ >/dev/null"]
       interval: 30s

@@ -112,14 +112,26 @@ http://<NAS-IP>:9832
 
 首次部署时建议立刻修改 `WEB_AUTH_PASSWORD`、`API_TOKEN` 和 `AUTH_SECRET`，不要使用示例值。
 
-群晖可以直接从 GitHub 拉取 compose 文件：
+群晖可以直接从 GitHub 拉取根目录的通用 compose 文件：
 
 ```bash
 mkdir -p /volume1/docker/ytb-dl
 cd /volume1/docker/ytb-dl
-wget -O docker-compose.yml https://raw.githubusercontent.com/ZiPenOk/ytb-dl/main/deploy/synology/docker-compose.yml
+wget -O docker-compose.yml https://raw.githubusercontent.com/ZiPenOk/ytb-dl/main/docker-compose.yml
 docker compose pull
 docker compose up -d
+```
+
+群晖使用前建议把 compose 里的这几项改成你的 NAS 路径和随机密钥：
+
+```yaml
+HOST_DOWNLOAD_PATH: /volume1/Nas/downloads/youtube
+WEB_AUTH_PASSWORD: your-password
+API_TOKEN: your-api-token
+AUTH_SECRET: your-random-session-secret
+volumes:
+  - /volume1/Nas/downloads/youtube:/app/downloads
+  - /volume1/docker/ytb-dl/config:/app/config
 ```
 
 ## 配置说明
@@ -270,7 +282,6 @@ tools/ytb-dl-violentmonkey.user.js
 ├── ytb/                       # 下载、配置、Cookie、更新等核心逻辑
 ├── telegram/                  # Telegram 推送和 Bot API 封装
 ├── tools/                     # 暴力猴远程推送脚本
-├── deploy/synology/           # 群晖部署辅助文件
 ├── docs/images/               # README 截图
 ├── main.py                    # FastAPI 服务入口
 ├── Dockerfile
