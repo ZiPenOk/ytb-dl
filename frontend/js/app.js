@@ -88,17 +88,16 @@ const elements = {
     ffmpegPresetSelect: document.getElementById('ffmpeg-preset-select'),
     ffmpegOutputFormat: document.getElementById('ffmpeg-output-format'),
 
-    // WeCom settings
-    wecomCorpId: document.getElementById('wecom-corp-id'),
-    wecomAgentId: document.getElementById('wecom-agent-id'),
-    wecomAppSecret: document.getElementById('wecom-app-secret'),
-    wecomToken: document.getElementById('wecom-token'),
-    wecomEncodingKey: document.getElementById('wecom-encoding-key'),
-    wecomPublicUrl: document.getElementById('wecom-public-url'),
-    wecomDefaultFormat: document.getElementById('wecom-default-format'),
-    wecomProxyDomain: document.getElementById('wecom-proxy-domain'),
-    wecomNotifyAdmin: document.getElementById('wecom-notify-admin'),
-    wecomAdminUsers: document.getElementById('wecom-admin-users')
+    // Telegram settings
+    telegramEnabled: document.getElementById('telegram-enabled'),
+    telegramBotToken: document.getElementById('telegram-bot-token'),
+    telegramChatId: document.getElementById('telegram-chat-id'),
+    telegramPublicUrl: document.getElementById('telegram-public-url'),
+    telegramEnableBotDownloads: document.getElementById('telegram-enable-bot-downloads'),
+    telegramNotifyStart: document.getElementById('telegram-notify-start'),
+    telegramNotifySuccess: document.getElementById('telegram-notify-success'),
+    telegramNotifyError: document.getElementById('telegram-notify-error'),
+    downloadDefaultFormat: document.getElementById('download-default-format')
 };
 
 // Initialize
@@ -185,10 +184,10 @@ function initEventListeners() {
         elements.ffmpegPresetSelect.addEventListener('change', handleFfmpegPresetChange);
     }
 
-    // Admin notification test button
-    const testAdminNotifyBtn = document.getElementById('test-admin-notify-btn');
-    if (testAdminNotifyBtn) {
-        testAdminNotifyBtn.addEventListener('click', testAdminNotification);
+    // Telegram notification test button
+    const testTelegramBtn = document.getElementById('test-telegram-btn');
+    if (testTelegramBtn) {
+        testTelegramBtn.addEventListener('click', testTelegramNotification);
     }
 
     // yt-dlp update event listeners
@@ -356,9 +355,9 @@ function updateFormatSelect(formats) {
 
     // Update the best quality option with size estimate
     if (bestQualityInfo) {
-        elements.formatSelect.innerHTML = `<option value="best">最佳质量 - ${bestQualityInfo}</option>`;
+        elements.formatSelect.innerHTML = `<option value="best">最佳质量 - ${bestQualityInfo}（自动合并音频）</option>`;
     } else {
-        elements.formatSelect.innerHTML = '<option value="best">最佳质量 (自动)</option>';
+        elements.formatSelect.innerHTML = '<option value="best">最佳质量 (自动合并音频)</option>';
     }
 
     if (formats && formats.length > 0) {
@@ -412,7 +411,11 @@ function updateFormatSelect(formats) {
                 currentFormatType = formatType;
 
                 const option = document.createElement('option');
-                option.value = format.format_id;
+                const hasAudio = format.acodec && format.acodec !== 'none';
+                const isVideoOnly = !hasAudio;
+                option.value = isVideoOnly
+                    ? `${format.format_id}+bestaudio[ext=m4a]/${format.format_id}+bestaudio/${format.format_id}`
+                    : format.format_id;
 
                 // Build format description parts
                 let parts = [];
@@ -435,6 +438,7 @@ function updateFormatSelect(formats) {
                 } else {
                     parts.push(format.ext);
                 }
+                parts.push(hasAudio ? '含音频' : '无音频，自动合并音频');
 
                 // Build size/bitrate info
                 let sizeInfo = '';
@@ -508,7 +512,7 @@ function updateFormatSelect(formats) {
                 option.value = format.format_id;
 
                 // Build audio format description
-                let parts = [];
+                let parts = ['纯音频'];
 
                 // Add format note or quality description
                 if (format.format_note && !format.format_note.includes('N/A')) {
@@ -1673,17 +1677,19 @@ async function loadSettings() {
         // Load cookies and update status
         await updateCookiesStatus();
 
-        if (config.wecom) {
-            elements.wecomCorpId.value = config.wecom.corp_id || '';
-            elements.wecomAgentId.value = config.wecom.agent_id ?? '';
-            elements.wecomAppSecret.value = config.wecom.app_secret || '';
-            elements.wecomToken.value = config.wecom.token || '';
-            elements.wecomEncodingKey.value = config.wecom.encoding_aes_key || '';
-            elements.wecomPublicUrl.value = config.wecom.public_base_url || '';
-            elements.wecomDefaultFormat.value = config.wecom.default_format_id || 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
-            elements.wecomProxyDomain.value = config.wecom.proxy_domain || '';
-            elements.wecomNotifyAdmin.checked = config.wecom.notify_admin || false;
-            elements.wecomAdminUsers.value = (config.wecom.admin_users || []).join(',');
+        if (config.download) {
+            elements.downloadDefaultFormat.value = config.download.default_format_id || 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best';
+        }
+
+        if (config.telegram) {
+            elements.telegramEnabled.checked = config.telegram.enabled || false;
+            elements.telegramBotToken.value = config.telegram.bot_token || '';
+            elements.telegramChatId.value = config.telegram.chat_id || '';
+            elements.telegramPublicUrl.value = config.telegram.public_base_url || '';
+            elements.telegramEnableBotDownloads.checked = config.telegram.enable_bot_downloads || false;
+            elements.telegramNotifyStart.checked = config.telegram.notify_on_start || false;
+            elements.telegramNotifySuccess.checked = config.telegram.notify_on_success !== false;
+            elements.telegramNotifyError.checked = config.telegram.notify_on_error !== false;
         }
     } catch (error) {
         console.error('Error loading settings:', error);
@@ -1739,35 +1745,22 @@ function handleFfmpegPresetChange() {
     }
 }
 
-async function saveSettings() {
+async function saveSettings(options = {}) {
+    const silent = options && options.silent === true;
+
     // Parse custom parameters
     const customParamsText = elements.customParams.value.trim();
     const customParams = customParamsText ? customParamsText.split('\n').filter(line => line.trim()) : [];
 
-    const corpId = elements.wecomCorpId.value.trim();
-    const agentIdRaw = elements.wecomAgentId.value.trim();
-    const appSecret = elements.wecomAppSecret.value.trim();
-    const token = elements.wecomToken.value.trim();
-    const encodingKey = elements.wecomEncodingKey.value.trim();
-    const publicUrl = elements.wecomPublicUrl.value.trim();
-    const defaultFormat = elements.wecomDefaultFormat.value.trim() || 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
-    const proxyDomain = elements.wecomProxyDomain.value.trim();
-    const notifyAdmin = elements.wecomNotifyAdmin.checked;
-    const adminUsersRaw = elements.wecomAdminUsers.value.trim();
-    const adminUsers = adminUsersRaw ? adminUsersRaw.split(',').map(u => u.trim()).filter(u => u) : [];
+    const downloadDefaultFormat = elements.downloadDefaultFormat.value.trim() || 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best';
+    const telegramEnabled = elements.telegramEnabled.checked;
+    const telegramBotToken = elements.telegramBotToken.value.trim();
+    const telegramChatId = elements.telegramChatId.value.trim();
+    const telegramPublicUrl = elements.telegramPublicUrl.value.trim();
 
-    if (encodingKey && encodingKey.length !== 43) {
-        alert('EncodingAESKey 必须为43位');
-        return;
-    }
-
-    let agentId = null;
-    if (agentIdRaw) {
-        agentId = Number(agentIdRaw);
-        if (Number.isNaN(agentId)) {
-            alert('AgentID 必须是数字');
-            return;
-        }
+    if (telegramEnabled && (!telegramBotToken || !telegramChatId)) {
+        alert('启用 Telegram 推送前，请填写 Bot Token 和 Chat ID');
+        return false;
     }
 
     // Debug FFmpeg elements
@@ -1802,17 +1795,18 @@ async function saveSettings() {
         },
         custom_params: customParams,
         ffmpeg: ffmpegConfig,
-        wecom: {
-            corp_id: corpId,
-            agent_id: agentId,
-            app_secret: appSecret,
-            token,
-            encoding_aes_key: encodingKey,
-            public_base_url: publicUrl,
-            default_format_id: defaultFormat,
-            proxy_domain: proxyDomain,
-            notify_admin: notifyAdmin,
-            admin_users: adminUsers
+        download: {
+            default_format_id: downloadDefaultFormat
+        },
+        telegram: {
+            enabled: telegramEnabled,
+            bot_token: telegramBotToken,
+            chat_id: telegramChatId,
+            public_base_url: telegramPublicUrl,
+            enable_bot_downloads: elements.telegramEnableBotDownloads.checked,
+            notify_on_start: elements.telegramNotifyStart.checked,
+            notify_on_success: elements.telegramNotifySuccess.checked,
+            notify_on_error: elements.telegramNotifyError.checked
         }
     };
 
@@ -1829,13 +1823,22 @@ async function saveSettings() {
         });
 
         if (response.ok) {
-            alert('设置保存成功！');
+            if (!silent) {
+                alert('设置保存成功！');
+            }
+            return true;
         } else {
-            alert('设置保存失败');
+            if (!silent) {
+                alert('设置保存失败');
+            }
+            return false;
         }
     } catch (error) {
         console.error('Error saving settings:', error);
-        alert('保存设置时出错');
+        if (!silent) {
+            alert('保存设置时出错');
+        }
+        return false;
     }
 }
 
@@ -1855,13 +1858,15 @@ async function resetSettings() {
     elements.fragmentRetries.value = 3;
     elements.cookiesInput.value = '';
     elements.customParams.value = '';
-    elements.wecomCorpId.value = '';
-    elements.wecomAgentId.value = '';
-    elements.wecomAppSecret.value = '';
-    elements.wecomToken.value = '';
-    elements.wecomEncodingKey.value = '';
-    elements.wecomPublicUrl.value = '';
-    elements.wecomDefaultFormat.value = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
+    elements.downloadDefaultFormat.value = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best';
+    elements.telegramEnabled.checked = false;
+    elements.telegramBotToken.value = '';
+    elements.telegramChatId.value = '';
+    elements.telegramPublicUrl.value = '';
+    elements.telegramEnableBotDownloads.checked = false;
+    elements.telegramNotifyStart.checked = false;
+    elements.telegramNotifySuccess.checked = true;
+    elements.telegramNotifyError.checked = true;
 
     // Save default settings
     await saveSettings();
@@ -2071,6 +2076,11 @@ async function importBrowserCookies() {
     const browserSelect = document.getElementById('browser-select');
     const importBtn = document.getElementById('import-browser-cookies-btn');
     const statusEl = document.getElementById('browser-cookie-status');
+    if (!statusEl) {
+        console.error('Missing browser-cookie-status element');
+        alert('页面缺少浏览器 Cookie 状态区域，请刷新页面后重试');
+        return;
+    }
     const statusText = statusEl.querySelector('.status-text');
 
     const browser = browserSelect.value;
@@ -2109,7 +2119,8 @@ async function importBrowserCookies() {
             }
         } else {
             statusEl.classList.add('error');
-            statusText.textContent = `❌ ${data.message}`;
+            const reason = data.error || data.message || '未能从浏览器读取 cookies';
+            statusText.textContent = `❌ 导入失败：${reason}。群晖 Docker 无法直接读取你电脑浏览器里的 Cookies，请改用手动上传或 CookieCloud。`;
         }
     } catch (error) {
         console.error('Error importing cookies:', error);
@@ -2160,6 +2171,28 @@ async function checkBrowserCookieStatus() {
             // Update UI based on status
             const statusEl = document.getElementById('browser-cookie-status');
             const statusText = statusEl.querySelector('.status-text');
+            const importBtn = document.getElementById('import-browser-cookies-btn');
+            const browserSelect = document.getElementById('browser-select');
+            const enabledCheckbox = document.getElementById('browser-cookies-enabled');
+            const autoRefreshCheckbox = document.getElementById('browser-cookies-auto-refresh');
+
+            if (status.supported === false) {
+                statusEl.classList.remove('hidden', 'success');
+                statusEl.classList.add('error');
+                statusText.textContent = `浏览器 Cookie 提取不可用：${status.reason}`;
+
+                if (importBtn) importBtn.disabled = true;
+                if (browserSelect) browserSelect.disabled = true;
+                if (enabledCheckbox) {
+                    enabledCheckbox.checked = false;
+                    enabledCheckbox.disabled = true;
+                }
+                if (autoRefreshCheckbox) {
+                    autoRefreshCheckbox.checked = false;
+                    autoRefreshCheckbox.disabled = true;
+                }
+                return;
+            }
 
             if (status.cookies_exist) {
                 statusEl.classList.remove('hidden', 'error');
@@ -2173,15 +2206,15 @@ async function checkBrowserCookieStatus() {
                 }
             }
 
-            // Update checkboxes
-            const enabledCheckbox = document.getElementById('browser-cookies-enabled');
-            const autoRefreshCheckbox = document.getElementById('browser-cookies-auto-refresh');
-
+            if (importBtn) importBtn.disabled = false;
+            if (browserSelect) browserSelect.disabled = false;
             if (enabledCheckbox) {
                 enabledCheckbox.checked = status.enabled;
+                enabledCheckbox.disabled = false;
             }
             if (autoRefreshCheckbox) {
                 autoRefreshCheckbox.checked = status.auto_refresh;
+                autoRefreshCheckbox.disabled = false;
             }
         }
     } catch (error) {
@@ -2200,7 +2233,7 @@ setInterval(async () => {
         const response = await fetch(`${API_BASE_URL}/api/browser-cookies/status`);
         if (response.ok) {
             const status = await response.json();
-            if (!status.cookies_fresh) {
+            if (status.supported !== false && !status.cookies_fresh) {
                 console.log('Auto-refreshing browser cookies...');
                 await fetch(`${API_BASE_URL}/api/browser-cookies/refresh`, {
                     method: 'POST'
@@ -2434,23 +2467,32 @@ function showCookieCloudStatus(message, type) {
 document.getElementById('cookiecloud-enabled')?.addEventListener('change', saveCookieCloudConfig);
 document.getElementById('cookiecloud-auto-sync')?.addEventListener('change', saveCookieCloudConfig);
 
-// Test admin notification
-async function testAdminNotification() {
+// Test Telegram notification
+async function testTelegramNotification() {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/wecom/test-admin`, {
+        const saved = await saveSettings({ silent: true });
+        if (!saved) {
+            return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/api/telegram/test`, {
             method: 'POST'
         });
 
         if (response.ok) {
             const result = await response.json();
-            alert(result.message || '测试通知已发送给管理员');
+            if (result.success) {
+                alert(result.message || 'Telegram 测试推送已发送');
+            } else {
+                alert(result.message || 'Telegram 测试推送失败');
+            }
         } else {
             const error = await response.json();
-            alert('发送测试通知失败: ' + (error.detail || '未知错误'));
+            alert('发送 Telegram 测试推送失败: ' + (error.detail || '未知错误'));
         }
     } catch (error) {
-        console.error('Error testing admin notification:', error);
-        alert('测试通知失败: ' + error.message);
+        console.error('Error testing Telegram notification:', error);
+        alert('Telegram 测试推送失败: ' + error.message);
     }
 }
 

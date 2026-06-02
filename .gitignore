@@ -38,4 +38,6 @@ yarn-error.log*
 # Temporary files
 *.tmp
 *.temp
+*.tar.gz
+*.zip
 .cache/.claude

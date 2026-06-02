@@ -11,13 +11,37 @@ from packaging import version
 logger = logging.getLogger(__name__)
 
 
+def get_external_package_dir() -> Optional[str]:
+    """Return the persistent package dir used for Docker-side hot updates."""
+    configured = os.environ.get("YTDLP_UPDATE_DIR")
+    if configured:
+        return configured
+    if os.path.exists("/app"):
+        return "/app/config/python-packages"
+    return None
+
+
+def ensure_external_package_dir() -> Optional[str]:
+    """Add the persistent package dir to sys.path before site-packages."""
+    package_dir = get_external_package_dir()
+    if package_dir and package_dir not in sys.path:
+        sys.path.insert(0, package_dir)
+    return package_dir
+
+
+ensure_external_package_dir()
+
+
 class YtDlpUpdater:
     """Handle yt-dlp version checking and updates"""
 
     GITHUB_API_URL = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
 
     def __init__(self):
-        self.current_version = yt_dlp.version.__version__
+        self.current_version = self._get_current_version()
+
+    def _get_current_version(self) -> str:
+        return yt_dlp.version.__version__
 
     async def check_for_updates(self) -> Dict[str, Any]:
         """Check if a new version of yt-dlp is available"""
@@ -34,13 +58,14 @@ class YtDlpUpdater:
                     latest_version = latest_version[1:]
 
                 # Compare versions
-                current = version.parse(self.current_version)
+                current_version = self._get_current_version()
+                current = version.parse(current_version)
                 latest = version.parse(latest_version)
 
                 update_available = latest > current
 
                 return {
-                    "current_version": self.current_version,
+                    "current_version": current_version,
                     "latest_version": latest_version,
                     "update_available": update_available,
                     "release_notes": latest_release.get('body', ''),
@@ -51,14 +76,14 @@ class YtDlpUpdater:
         except httpx.HTTPError as e:
             logger.error(f"Failed to check for updates: {e}")
             return {
-                "current_version": self.current_version,
+                "current_version": self._get_current_version(),
                 "error": f"Failed to check for updates: {str(e)}",
                 "update_available": False
             }
         except Exception as e:
             logger.error(f"Unexpected error checking for updates: {e}")
             return {
-                "current_version": self.current_version,
+                "current_version": self._get_current_version(),
                 "error": f"Unexpected error: {str(e)}",
                 "update_available": False
             }
@@ -66,16 +91,32 @@ class YtDlpUpdater:
     def update_yt_dlp(self) -> Dict[str, Any]:
         """Update yt-dlp to the latest version"""
         try:
+            old_version = self._get_current_version()
             # Check if running in Docker
             is_docker = os.path.exists("/app")
 
+            package_dir = ensure_external_package_dir()
+
             if is_docker:
-                # In Docker, try with --user flag for user-level installation
+                if not package_dir:
+                    raise RuntimeError("Persistent Python package directory is not configured")
+
+                os.makedirs(package_dir, exist_ok=True)
                 result = subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "--upgrade", "--user", "yt-dlp"],
+                    [
+                        sys.executable,
+                        "-m",
+                        "pip",
+                        "install",
+                        "--upgrade",
+                        "--target",
+                        package_dir,
+                        "yt-dlp",
+                        "yt-dlp-ejs",
+                    ],
                     capture_output=True,
                     text=True,
-                    timeout=60
+                    timeout=300
                 )
             else:
                 # Normal pip upgrade
@@ -83,27 +124,28 @@ class YtDlpUpdater:
                     [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
                     capture_output=True,
                     text=True,
-                    timeout=60
+                    timeout=300
                 )
 
             if result.returncode == 0:
-                # Reload the module to get the new version
-                import importlib
-                importlib.reload(yt_dlp.version)
-                new_version = yt_dlp.version.__version__
+                new_version = self._reload_yt_dlp()
 
                 return {
                     "success": True,
                     "message": "yt-dlp updated successfully",
-                    "old_version": self.current_version,
+                    "old_version": old_version,
                     "new_version": new_version,
-                    "output": result.stdout
+                    "output": result.stdout,
+                    "package_dir": package_dir,
+                    "restart_recommended": is_docker
                 }
             else:
                 error_message = result.stderr
                 if is_docker:
-                    if "Permission denied" in error_message or "Read-only file system" in error_message:
-                        error_message += "\n\nNote: Docker container may have read-only file system. To update yt-dlp in Docker:\n1. Rebuild the Docker image with the latest yt-dlp\n2. Or mount a writable volume for Python packages"
+                    error_message += (
+                        "\n\nDocker update target: "
+                        f"{package_dir}. Make sure /app/config is writable."
+                    )
 
                 logger.error(f"Failed to update yt-dlp: {error_message}")
 
@@ -129,6 +171,29 @@ class YtDlpUpdater:
                 "error": str(e)
             }
 
+    def _reload_yt_dlp(self) -> str:
+        """Reload yt-dlp from the newest available sys.path location."""
+        import importlib
+
+        ensure_external_package_dir()
+        importlib.invalidate_caches()
+
+        for module_name in list(sys.modules):
+            if module_name == "yt_dlp" or module_name.startswith("yt_dlp."):
+                del sys.modules[module_name]
+
+        fresh_yt_dlp = importlib.import_module("yt_dlp")
+        globals()["yt_dlp"] = fresh_yt_dlp
+
+        try:
+            import ytb.downloader as downloader_module
+            downloader_module.yt_dlp = fresh_yt_dlp
+        except Exception as e:
+            logger.warning(f"Could not refresh downloader yt_dlp reference: {e}")
+
+        self.current_version = fresh_yt_dlp.version.__version__
+        return self.current_version
+
     async def get_version_info(self) -> Dict[str, Any]:
         """Get detailed version information"""
         try:
@@ -147,7 +212,7 @@ class YtDlpUpdater:
             update_info = await self.check_for_updates()
 
             return {
-                "yt_dlp_version": self.current_version,
+                "yt_dlp_version": self._get_current_version(),
                 "python_version": python_version,
                 "pip_version": pip_version,
                 "update_info": update_info

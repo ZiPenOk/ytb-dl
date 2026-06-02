@@ -55,17 +55,18 @@ class Config:
                 "auto_sync": True,
                 "sync_interval_minutes": 30
             },
-            "wecom": {
-                "corp_id": "",
-                "agent_id": None,
-                "app_secret": "",
-                "token": "",
-                "encoding_aes_key": "",
+            "download": {
+                "default_format_id": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+            },
+            "telegram": {
+                "enabled": False,
+                "bot_token": "",
+                "chat_id": "",
                 "public_base_url": "",
-                "default_format_id": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
-                "proxy_domain": "",
-                "admin_users": [],
-                "notify_admin": False
+                "enable_bot_downloads": False,
+                "notify_on_start": False,
+                "notify_on_success": True,
+                "notify_on_error": True
             }
         }
         self.config = self.load_config()
@@ -76,6 +77,7 @@ class Config:
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     loaded = json.load(f)
+                    loaded = self._filter_supported_config(loaded)
                     # 合并默认配置和加载的配置
                     merged = self._deep_merge(self.default_config, loaded)
                     print(f"[CONFIG] Loaded config from {self.config_file}")
@@ -148,9 +150,13 @@ class Config:
         """Return the current CookieCloud configuration block."""
         return self.config.get("cookiecloud", {}).copy()
 
-    def get_wecom_config(self) -> Dict[str, Any]:
-        """Return the current WeCom configuration block."""
-        return self.config.get("wecom", {}).copy()
+    def get_download_config(self) -> Dict[str, Any]:
+        """Return the current download configuration block."""
+        return self.config.get("download", {}).copy()
+
+    def get_telegram_config(self) -> Dict[str, Any]:
+        """Return the current Telegram notification configuration block."""
+        return self.config.get("telegram", {}).copy()
 
     def get_effective_cookies_file(self) -> Optional[str]:
         """Return the currently usable cookies file path if it exists."""
@@ -275,6 +281,13 @@ class Config:
             else:
                 result[key] = value
         return result
+
+    def _filter_supported_config(self, loaded: Dict[str, Any]) -> Dict[str, Any]:
+        """Drop stale top-level config sections from older versions."""
+        if not isinstance(loaded, dict):
+            return {}
+        supported = set(self.default_config.keys())
+        return {key: value for key, value in loaded.items() if key in supported}
 
     def _get_cookies_file(self) -> Optional[str]:
         """获取cookies文件路径，优先级：配置文件 > config/cookies.txt"""

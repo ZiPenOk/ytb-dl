@@ -3,7 +3,7 @@ name: Create Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -11,59 +11,50 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Generate changelog
-      id: changelog
-      run: |
-        # Get the previous tag
-        PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+      - name: Build changelog
+        id: changelog
+        shell: bash
+        run: |
+          PREV_TAG="$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || true)"
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
 
-        # Generate changelog
-        if [ -n "$PREV_TAG" ]; then
-          CHANGELOG=$(git log ${PREV_TAG}..HEAD --oneline --pretty=format:"- %s")
-        else
-          CHANGELOG=$(git log --oneline --pretty=format:"- %s")
-        fi
+          {
+            echo "## Changes"
+            echo
+            git log "$RANGE" --pretty=format:"- %s" || true
+            echo
+            echo
+            echo "## Docker Image"
+            echo
+            echo "- \`ghcr.io/zipenok/ytb-dl:${GITHUB_REF_NAME}\`"
+            echo "- \`ghcr.io/zipenok/ytb-dl:latest\`"
+            echo
+            echo "## Quick Start"
+            echo
+            echo "\`\`\`bash"
+            echo "docker pull ghcr.io/zipenok/ytb-dl:${GITHUB_REF_NAME}"
+            echo "docker compose up -d"
+            echo "\`\`\`"
+          } > CHANGELOG.md
 
-        # Save changelog to file
-        cat > CHANGELOG.md << EOF
-        ## Changes
+          {
+            echo "body<<EOF"
+            cat CHANGELOG.md
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
-        ${CHANGELOG}
-
-        ## Docker Images
-
-        - \`docker pull thsrite/ytb-dl:${GITHUB_REF#refs/tags/}\`
-        - \`docker pull thsrite/ytb-dl:latest\`
-
-        ## Quick Start
-
-        \`\`\`bash
-        # Using docker-compose
-        curl -O https://raw.githubusercontent.com/thsrite/ytb-dl/${GITHUB_REF#refs/tags/}/docker-compose.yml
-        docker-compose up -d
-
-        # Or using docker directly
-        docker run -p 9832:9832 -v ./downloads:/app/downloads -v ./config:/app/config thsrite/ytb-dl:${GITHUB_REF#refs/tags/}
-        \`\`\`
-        EOF
-
-        echo "changelog<<EOF" >> $GITHUB_OUTPUT
-        cat CHANGELOG.md >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-
-    - name: Create Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        body: ${{ steps.changelog.outputs.changelog }}
-        draft: false
-        prerelease: false
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.changelog.outputs.body }}

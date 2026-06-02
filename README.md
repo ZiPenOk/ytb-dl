@@ -1,946 +1,298 @@
-# YouTube Video Downloader
+# YTB-DL Maintained
 
-<div align="center">
-  <img src="ytb-dl.png" alt="YTB-DL Logo" width="200">
-</div>
+> 本项目根据原项目 [thsrite/ytb-dl](https://github.com/thsrite/ytb-dl) 修改并继续维护。
+> 原项目年久失修后，部分功能已经无法满足当前 YouTube / yt-dlp / NAS 自托管环境的使用需求，本维护版围绕docker部署、稳定下载、自动合并音视频、远程推送下载和 Telegram 通知做了二次开发。
 
-[![Build Status](https://github.com/thsrite/ytb-dl/actions/workflows/docker-build.yml/badge.svg)](https://github.com/thsrite/ytb-dl/actions)
-[![Docker Pulls](https://img.shields.io/docker/pulls/thsrite/ytb-dl)](https://hub.docker.com/r/thsrite/ytb-dl)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+YTB-DL Maintained 是一个面向 NAS / Docker 环境的 YouTube 下载 Web 工具。它提供网页解析下载、登录保护、API Token、Telegram 下载通知、Telegram 发送链接触发下载，以及暴力猴脚本远程推送下载能力。
 
-一个功能强大的 YouTube 视频下载器，集成企业微信应用交互下载、通知、多格式支持、实时进度监控和现代化 Web 界面。基于 FastAPI 和 yt-dlp 构建，支持 Docker 部署和源码部署。
+## 功能特性
 
-![Screenshot](https://img.shields.io/badge/UI-Modern%20Glassmorphism-brightgreen)
+- Web 登录验证，避免下载页面裸露在公网。
+- API Token 验证，便于脚本、自动化或远程推送调用。
+- 支持 YouTube 视频信息解析、格式选择和历史记录。
+- 默认下载策略自动选择视频和音频并合并，避免下载后无声音。
+- 格式列表标注是否含音频，视频-only 格式会自动组合最佳音频。
+- 支持 `cookies.txt`，可使用 Get cookies.txt 等浏览器扩展导出的 Cookie 文件。
+- 支持 CookieCloud 同步 Cookie。
+- 支持 yt-dlp 更新到持久化目录，减少镜像年久失修导致的解析失败。
+- 支持 Telegram 下载开始、完成、失败通知。
+- 支持向 Telegram Bot 发送 YouTube 链接自动创建下载任务。
+- 支持暴力猴脚本在 YouTube 页面远程推送下载任务。
+- 支持群晖 / NAS 下载目录映射，并在通知中显示宿主机路径。
 
-## ✨ 功能特性
+## 界面预览
+
+### Web 界面
 
 <table>
   <tr>
-    <td><img src="image/IMG_4671.PNG" width="200"/></td>
-    <td><img src="image/IMG_4672.PNG" width="200"/></td>
-    <td><img src="image/IMG_4673.PNG" width="200"/></td>
-    <td><img src="image/IMG_4674.PNG" width="200"/></td>
-    <td><img src="image/IMG_4675.PNG" width="200"/></td>
+    <td><img src="docs/images/1.jpg" alt="界面截图 1" width="100%"></td>
+    <td><img src="docs/images/2.jpg" alt="界面截图 2" width="100%"></td>
+    <td><img src="docs/images/3.jpg" alt="界面截图 3" width="100%"></td>
+    <td><img src="docs/images/4.jpg" alt="界面截图 4" width="100%"></td>
   </tr>
   <tr>
-    <td><img src="image/IMG_4676.PNG" width="200"/></td>
-    <td><img src="image/IMG_4677.PNG" width="200"/></td>
-    <td><img src="image/IMG_4685.JPG" width="200"/></td>
-    <td><img src="image/IMG_4686.JPG" width="200"/></td>
-    <td><img src="image/IMG_4687.JPG" width="200"/></td>
-  </tr>
-  <tr>
-    <td><img src="image/IMG_4688.JPG" width="200"/></td>
-    <td><img src="image/IMG_4689.JPG" width="200"/></td>
-    <td><img src="image/IMG_4690.PNG" width="200"/></td>
+    <td><img src="docs/images/5.jpg" alt="界面截图 5" width="100%"></td>
+    <td><img src="docs/images/6.jpg" alt="界面截图 6" width="100%"></td>
+    <td><img src="docs/images/7.jpg" alt="界面截图 7" width="100%"></td>
+    <td><img src="docs/images/8.jpg" alt="界面截图 8" width="100%"></td>
   </tr>
 </table>
-### 🎥 视频下载
-- 支持多种视频质量（4K, 1080p, 720p, 480p, 360p）
-- 智能格式选择（MP4+M4A 优先）
-- 自动合并音视频轨道
-- 文件大小智能预估
 
-### 🎵 音频提取
-- 高质量音频提取（M4A, MP3）
-- 自定义音频比特率
-- 保留原始音频质量
+### Telegram 消息
 
-### 📱 企业微信集成
-- 企业微信应用交互下载
-- 下载完成自动推送
-- 视频缩略图展示
-- 新闻卡片式消息
-- 403/网络错误实时通知
-- 管理员通知系统
-- Cookie 同步状态推送
+<table>
+  <tr>
+    <td width="50%">
+      <strong>后台下载完成通知</strong><br>
+      <img src="docs/images/9.jpg" alt="Telegram 下载完成通知" width="100%">
+    </td>
+    <td width="50%">
+      <strong>向机器人发送链接自动下载</strong><br>
+      <img src="docs/images/10.jpg" alt="Telegram 发送链接触发下载" width="100%">
+    </td>
+  </tr>
+</table>
 
-### 💻 Web 界面
-- 现代化玻璃拟态设计
-- 响应式移动端适配
-- 实时进度监控
-- 2x2 网格移动布局
-- 视频播放预览
-- 批量删除下载历史
-- Cookie 状态实时显示
+### 暴力猴远程推送
 
-### 🔧 高级特性
-- Cookie 支持（突破地区限制）
-- CookieCloud 自动同步
-- 浏览器 Cookie 提取
-- 代理服务器配置
-- 自定义 yt-dlp 参数
-- 下载历史管理
-- 多并发下载
-- yt-dlp 在线更新
-- 智能错误重试机制
-- 统一消息模板系统
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/11.jpg" alt="暴力猴远程下载截图 1" width="100%"></td>
+    <td width="50%"><img src="docs/images/12.jpg" alt="暴力猴远程下载截图 2" width="100%"></td>
+  </tr>
+</table>
 
-## 🛠️ 技术栈
+## 快速部署
 
-| 分类 | 技术 | 说明 |
-|------|------|------|
-| **后端框架** | FastAPI | 现代化 Python Web 框架 |
-| **下载引擎** | yt-dlp | 强大的媒体下载工具 |
-| **前端技术** | HTML5 + CSS3 + JavaScript | 现代化 Web 技术 |
-| **实时通信** | WebSocket | 下载进度实时推送 |
-| **企业通信** | WeChat Work API | 企业微信消息推送 |
-| **容器化** | Docker | 轻量级部署方案 |
-| **CI/CD** | GitHub Actions | 自动化构建和部署 |
+推荐使用 Docker / Docker Compose 部署。镜像由 GitHub Actions 自动构建并发布到 GHCR：
 
-## 📁 项目结构
-
-```
-ytb_dl/
-├── 🚀 main.py                    # FastAPI 应用入口
-├── 📦 ytb/                       # 核心业务包
-│   ├── __init__.py               # 包初始化
-│   ├── config.py                 # 配置管理
-│   ├── downloader.py             # 下载核心逻辑
-│   ├── history_manager.py        # 历史记录管理
-│   ├── browser_cookies.py        # 浏览器Cookie提取
-│   ├── cookiecloud.py            # CookieCloud同步
-│   └── updater.py                # yt-dlp更新管理
-├── 💬 wecom/                     # 企业微信集成
-│   ├── __init__.py
-│   ├── client.py                 # WeChat Work 客户端
-│   ├── service.py                # 消息推送服务
-│   ├── crypto.py                 # 消息加密解密
-│   └── message_templates.py      # 统一消息模板
-├── 🎨 frontend/                  # 前端资源
-│   ├── index.html                # 主界面
-│   ├── css/styles.css            # 样式文件
-│   └── js/app.js                 # 交互逻辑
-├── ⚙️ config/                    # 配置文件目录
-│   ├── config.json               # 主配置文件
-│   ├── cookies.txt               # YouTube Cookies
-│   └── download_history.json     # 下载历史
-├── 📥 downloads/                 # 下载文件存储
-├── 🐳 Docker 相关
-│   ├── Dockerfile                # Docker 镜像构建
-│   ├── docker-compose.yml        # 服务编排
-│   └── docker-entrypoint.sh      # 容器启动脚本
-├── 🔧 .github/workflows/         # CI/CD 流水线
-│   ├── docker-build.yml          # 镜像构建发布
-│   └── release.yml               # 版本发布
-└── 📄 requirements.txt           # Python 依赖包
+```text
+ghcr.io/zipenok/ytb-dl:latest
 ```
 
-## 🚀 快速开始
+下面是群晖 NAS 常用的目录映射示例：
 
-### 方法一：Docker 部署（推荐）
+```yaml
+services:
+  ytb-dl:
+    image: ghcr.io/zipenok/ytb-dl:latest
+    container_name: ytb-dl
+    pull_policy: always
+    ports:
+      - "9832:9832"
+    volumes:
+      - ./config:/app/config
+      - /volume1/Nas/downloads/youtube:/app/downloads
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app/config/python-packages:/app
+      - YTDLP_UPDATE_DIR=/app/config/python-packages
+      - HOST_DOWNLOAD_PATH=/volume1/Nas/downloads/youtube
+      - WEB_AUTH_USERNAME=admin
+      - WEB_AUTH_PASSWORD=change-this-password
+      - API_TOKEN=change-this-api-token
+      - AUTH_SECRET=change-this-session-secret
+    restart: unless-stopped
+```
+
+启动：
 
 ```bash
-# 1. 拉取并运行最新镜像
-docker run -d \
-  --name ytb-downloader \
-  -p 9832:9832 \
-  -v ./downloads:/app/downloads \
-  -v ./config:/app/config \
-  thsrite/ytb-dl:latest
-
-# 2. 或使用 docker-compose
-curl -O https://raw.githubusercontent.com/thsrite/ytb-dl/main/docker-compose.yml
-docker-compose up -d
-
-# 3. 访问应用
-open http://localhost:9832
+docker compose pull
+docker compose up -d
 ```
 
-#### ⚡ 启用核显加速（Intel Quick Sync）
+访问：
+
+```text
+http://<NAS-IP>:9832
+```
+
+首次部署时建议立刻修改 `WEB_AUTH_PASSWORD`、`API_TOKEN` 和 `AUTH_SECRET`，不要使用示例值。
+
+群晖可以直接从 GitHub 拉取 compose 文件：
 
 ```bash
-docker run -d \
-  --name ytb-downloader \
-  -p 9832:9832 \
-  -v ./downloads:/app/downloads \
-  -v ./config:/app/config \
-  --device /dev/dri \
-  -e LIBVA_DRIVER_NAME=iHD \
-  thsrite/ytb-dl:latest
+mkdir -p /volume1/docker/ytb-dl
+cd /volume1/docker/ytb-dl
+wget -O docker-compose.yml https://raw.githubusercontent.com/ZiPenOk/ytb-dl/main/deploy/synology/docker-compose.yml
+docker compose pull
+docker compose up -d
 ```
 
-- 确保宿主机已启用 VA-API（`vainfo` 可正常输出）
-- 如需在非 root 用户下访问核显，记得将用户加入 `video` 组
-- GitHub Actions 构建输出为 `linux/amd64` 架构镜像，便于 iGPU 加速
+## 配置说明
 
-### 方法二：源码部署
+### 下载目录
 
-#### 环境要求
-- Python 3.12+
-- ffmpeg（音视频处理）
-- Git
+容器内下载目录为：
 
-#### 安装步骤
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/thsrite/ytb-dl.git
-cd ytb-dl
-
-# 2. 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# Windows: venv\Scripts\activate
-
-# 3. 安装依赖
-pip install -r requirements.txt
-
-# 4. 安装 ffmpeg
-# Ubuntu/Debian (Docker镜像基于Ubuntu 24.04)
-sudo apt update && sudo apt install ffmpeg
-
-# macOS
-brew install ffmpeg
-
-# Windows
-# 下载 https://ffmpeg.org/download.html 并配置 PATH
-
-# 5. 启动服务
-python main.py
-# 或使用 uvicorn
-uvicorn main:app --host 0.0.0.0 --port 9832
-
-# 6. 访问应用
-open http://localhost:9832
+```text
+/app/downloads
 ```
 
-### 🐳 Docker 镜像信息
+群晖建议映射到：
 
-| 标签 | 描述 | 适用场景 |
-|------|------|----------|
-| `latest` | 最新稳定版（基于Ubuntu 24.04） | 生产环境推荐 |
-| `v1.0.x` | 指定版本 | 版本锁定部署 |
-| `main` | 主分支最新 | 测试新功能 |
-
-**镜像特性：**
-- 基础镜像：Ubuntu 24.04 LTS
-- 内置FFmpeg 6.1（支持硬件加速）
-- Python 3.12 运行环境
-- Intel Quick Sync / VA-API 支持
-
-### 🔧 环境变量配置
-
-```bash
-# Docker 运行时可配置的环境变量
-docker run -d \
-  -e PYTHONPATH=/app \
-  -e PYTHONUNBUFFERED=1 \
-  -p 9832:9832 \
-  thsrite/ytb-dl:latest
+```text
+/volume1/Nas/downloads/youtube
 ```
 
-## 📚 API 文档
+同时设置：
 
-### 🔍 视频信息获取
+```text
+HOST_DOWNLOAD_PATH=/volume1/Nas/downloads/youtube
+```
+
+这样 Telegram 下载完成通知里会显示 NAS 上的真实文件路径，而不是容器内路径。
+
+### 登录和 API Token
+
+Web 页面使用 Cookie Session 登录。API 支持以下任一方式传递 Token：
 
 ```http
-POST /api/video/info
-Content-Type: application/json
-
-{
-  "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-}
+Authorization: Bearer <API_TOKEN>
 ```
 
-**响应示例：**
-```json
-{
-  "id": "dQw4w9WgXcQ",
-  "title": "Rick Astley - Never Gonna Give You Up",
-  "duration": 212,
-  "uploader": "RickAstleyVEVO",
-  "view_count": 1000000000,
-  "thumbnail": "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
-  "formats": [
-    {
-      "format_id": "137+140",
-      "format_note": "1080p+128k",
-      "ext": "mp4",
-      "filesize": 89641234,
-      "resolution": "1920x1080"
-    }
-  ]
-}
-```
-
-### ⬇️ 视频下载
+或：
 
 ```http
-POST /api/download
-Content-Type: application/json
-
-{
-  "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-  "format_id": "bestvideo[ext=mp4]+bestaudio[ext=m4a]"
-}
+X-API-Token: <API_TOKEN>
 ```
 
-### 📊 下载进度（WebSocket）
-
-```javascript
-const ws = new WebSocket('ws://localhost:9832/ws');
-ws.onmessage = function(event) {
-  const data = JSON.parse(event.data);
-  if (data.type === 'download_progress') {
-    console.log(`进度: ${data.progress.percent}%`);
-  }
-};
-
-// 进度数据格式
-{
-  "type": "download_progress",
-  "data": {
-    "task_id": "uuid-string",
-    "progress": {
-      "percent": 67.5,
-      "speed": "2.3MB/s",
-      "eta": 45,
-      "downloaded_bytes": 45678900,
-      "total_bytes": 67890000,
-      "phase": "downloading_video"
-    },
-    "status": "downloading"
-  }
-}
-```
-
-### 📝 历史记录管理
-
-```http
-# 获取历史记录
-GET /api/history?limit=10&offset=0
-
-# 删除历史记录
-DELETE /api/history/{task_id}
-
-# 清理历史记录
-POST /api/history/cleanup?days=30
-```
-
-### ⚙️ 配置管理
-
-```http
-# 获取当前配置
-GET /api/config
-
-# 更新配置
-POST /api/config
-Content-Type: application/json
-
-{
-  "wecom": {
-    "corp_id": "your_corp_id",
-    "app_secret": "your_app_secret",
-    "agent_id": 1000001
-  },
-  "proxy": "http://proxy:8080",
-  "cookies_file": "/path/to/cookies.txt"
-}
-```
-
-## ⚙️ 配置详解
-
-### 📄 主配置文件 `config/config.json`
-
-```json
-{
-  "cookies_file": null,
-  "proxy": "http://proxy:8080",
-  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-  "extra_params": {
-    "nocheckcertificate": true,
-    "geo_bypass": true,
-    "sleep_interval": 1,
-    "max_sleep_interval": 3,
-    "retries": 3,
-    "fragment_retries": 3,
-    "skip_unavailable_fragments": true
-  },
-  "custom_params": [
-    "--concurrent-fragments 5",
-    "--throttled-rate 100K"
-  ],
-  "cookiecloud": {
-    "enabled": false,
-    "server_url": "https://your-cookiecloud-server.com",
-    "uuid_key": "your_uuid_key",
-    "password": "your_password",
-    "auto_sync": true,
-    "sync_interval_minutes": 30
-  },
-  "wecom": {
-    "corp_id": "ww1234567890123456",
-    "agent_id": 1000001,
-    "app_secret": "your_app_secret",
-    "token": "your_callback_token",
-    "encoding_aes_key": "your_encoding_aes_key",
-    "public_base_url": "https://your-domain.com",
-    "default_format_id": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-    "proxy_domain": "your-proxy-domain.com"
-  },
-  "ffmpeg": {
-    "enabled": false,
-    "av1_only": true,
-    "hardware_preset": "custom",
-    "command": "-c:v libx264 -preset medium -crf 23 -c:a aac -b:a 192k",
-    "output_format": "mp4"
-  }
-}
-```
-
-### 📋 配置项详细说明
-
-| 配置项 | 类型 | 说明 | 示例 |
-|-------|------|------|------|
-| `cookies_file` | string/null | Cookie 文件路径 | `"/app/config/cookies.txt"` |
-| `proxy` | string/null | 代理服务器地址 | `"http://proxy:8080"` |
-| `user_agent` | string | 浏览器 User-Agent | Chrome 最新版本 UA |
-| `extra_params.retries` | int | 重试次数 | `3` |
-| `extra_params.sleep_interval` | int | 请求间隔（秒） | `1` |
-| `custom_params` | array | 自定义 yt-dlp 参数 | 见上方示例 |
-| `cookiecloud.enabled` | bool | 启用CookieCloud同步 | `true` |
-| `cookiecloud.server_url` | string | CookieCloud服务地址 | `"https://cookiecloud.com"` |
-| `cookiecloud.auto_sync` | bool | 自动同步（每30分钟） | `true` |
-| `ffmpeg.enabled` | bool | 启用FFmpeg转码 | `false` |
-| `ffmpeg.av1_only` | bool | 仅转码AV1视频 | `true` |
-| `ffmpeg.hardware_preset` | string | 硬件加速预设 | `"custom"` |
-| `ffmpeg.command` | string | FFmpeg命令参数 | 见下方说明 |
-| `ffmpeg.output_format` | string | 输出格式 | `"mp4"` |
-
-### 🏢 企业微信配置
-
-```json
-{
-  "wecom": {
-    "corp_id": "企业ID",
-    "agent_id": "应用ID（整数）",
-    "app_secret": "应用密钥",
-    "token": "回调 Token（可选）",
-    "encoding_aes_key": "回调加密密钥（可选）",
-    "public_base_url": "公网访问地址",
-    "default_format_id": "默认下载格式",
-    "proxy_domain": "代理域名（可选）"
-  }
-}
-```
-
-### 🍪 Cookie 管理
-
-#### 方式一：CookieCloud 同步（推荐）
-自动从 CookieCloud 服务同步最新 cookies，支持自动定时同步：
-
-```json
-{
-  "cookiecloud": {
-    "enabled": true,
-    "server_url": "https://your-cookiecloud.com",
-    "uuid_key": "your_uuid",
-    "password": "your_password",
-    "auto_sync": true,
-    "sync_interval_minutes": 30
-  }
-}
-```
-
-#### 方式二：浏览器提取
-自动从本地浏览器提取 YouTube cookies，支持 Chrome、Edge、Firefox 等主流浏览器。
-
-#### 方式三：手动上传
-支持 Netscape 格式的 Cookie 文件：
-
-```txt
-# Netscape HTTP Cookie File
-.youtube.com    TRUE    /    FALSE    1792896464    SID    your_session_id
-.youtube.com    TRUE    /    TRUE     1792896464    __Secure-1PSID    your_secure_session
-```
-
-### 🎬 FFmpeg 转码配置
-
-#### 硬件加速预设
-
-| 预设名称 | FFmpeg 命令 | 适用场景 |
-|----------|-------------|----------|
-| `intel_qsv` | `-c:v h264_qsv -preset medium -global_quality 23` | Intel 核显加速 |
-| `nvidia` | `-c:v h264_nvenc -preset medium -cq 23` | NVIDIA 显卡加速 |
-| `amd` | `-c:v h264_amf -quality balanced -rc cqp -qp 23` | AMD 显卡加速 |
-| `videotoolbox` | `-c:v h264_videotoolbox -b:v 5000k` | macOS 硬件加速 |
-| `vaapi` | `-vaapi_device /dev/dri/renderD128 -c:v h264_vaapi` | Linux VA-API |
-| `custom` | 自定义命令 | 高级用户自定义 |
-
-#### 自定义转码示例
-
-```json
-{
-  "ffmpeg": {
-    "enabled": true,
-    "av1_only": true,  // 仅转码AV1视频，false则转码所有
-    "hardware_preset": "custom",
-    "command": "-c:v libx265 -preset slow -crf 20 -c:a aac -b:a 256k",
-    "output_format": "mp4"
-  }
-}
-```
-
-### 🔧 高级参数定制
-
-```json
-{
-  "custom_params": [
-    "--concurrent-fragments 8",      // 并发片段下载数
-    "--throttled-rate 1M",          // 限制下载速度
-    "--socket-timeout 30",          // Socket 超时时间
-    "--retries infinite",           // 无限重试
-    "--fragment-retries 10",        // 片段重试次数
-    "--keep-fragments",             // 保留临时片段
-    "--no-part",                    // 不使用 .part 临时文件
-    "--write-info-json",            // 保存视频信息 JSON
-    "--write-thumbnail",            // 下载缩略图
-    "--embed-subs",                 // 内嵌字幕
-    "--write-auto-subs"             // 下载自动字幕
-  ]
-}
-```
-
-## 📖 使用指南
-
-### 🖥️ Web 界面操作
-
-1. **访问应用**
-   ```bash
-   # 访问主界面
-   http://localhost:9832
-   ```
-
-2. **基本下载流程**
-   - 📝 粘贴 YouTube 视频链接
-   - 🔍 点击"获取视频信息"预览视频
-   - 🎯 选择下载格式和质量
-   - ⬇️ 点击"下载"开始任务
-   - 📊 实时查看下载进度
-   - 📁 完成后查看下载文件
-
-3. **高级功能使用**
-   - ⚙️ 高级设置：配置 Cookie、代理等
-   - 📱 企业微信：接收下载通知消息
-   - 📝 历史记录：管理下载任务历史
-   - 🎮 播放预览：直接在线播放下载的视频
-
-### 💻 编程接口使用
-
-```python
-import asyncio
-from ytb.downloader import YTDownloader
-
-async def download_video():
-    # 初始化下载器
-    downloader = YTDownloader("./downloads")
-
-    # 获取视频信息
-    info = await downloader.get_video_info(
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-    )
-    print(f"视频标题: {info['title']}")
-    print(f"时长: {info['duration']}秒")
-
-    # 开始下载
-    task_id = await downloader.download_video(
-        url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        format_id="bestvideo[ext=mp4]+bestaudio[ext=m4a]"
-    )
-
-    # 监控下载进度
-    while True:
-        status = downloader.get_download_status(task_id)
-        if status['status'] == 'completed':
-            print(f"下载完成: {status['filename']}")
-            break
-        elif status['status'] == 'error':
-            print(f"下载失败: {status['error']}")
-            break
-
-        progress = status.get('progress', {})
-        if progress.get('percent'):
-            print(f"进度: {progress['percent']:.1f}%")
-
-        await asyncio.sleep(1)
-
-# 运行下载任务
-asyncio.run(download_video())
-```
-
-### 🔧 高级用法示例
-
-#### 批量下载
-```python
-import asyncio
-from ytb.downloader import YTDownloader
-
-async def batch_download():
-    downloader = YTDownloader()
-    urls = [
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        "https://www.youtube.com/watch?v=oHg5SJYRHA0",
-        # 更多URL...
-    ]
-
-    tasks = []
-    for url in urls:
-        task_id = await downloader.download_video(url)
-        tasks.append(task_id)
-
-    # 等待所有任务完成
-    for task_id in tasks:
-        # 监控逻辑...
-        pass
-
-asyncio.run(batch_download())
-```
-
-#### 自定义配置下载
-```python
-from ytb.config import Config
-from ytb.downloader import YTDownloader
-
-# 自定义配置
-config = Config()
-config.update_config({
-    "proxy": "http://proxy:8080",
-    "custom_params": [
-        "--concurrent-fragments 8",
-        "--retries 5"
-    ]
-})
-
-downloader = YTDownloader()
-# 使用自定义配置进行下载
-```
-
-## ❓ 常见问题
-
-### 🐌 下载速度慢
-**问题**: 下载速度很慢或经常中断
-**解决方案**:
-```json
-{
-  "proxy": "http://your-proxy:8080",
-  "custom_params": [
-    "--concurrent-fragments 8",
-    "--throttled-rate 5M",
-    "--socket-timeout 30"
-  ]
-}
-```
-
-### 🔧 ffmpeg 未找到
-**问题**: 提示 `ffmpeg not found` 错误
-**解决方案**:
-```bash
-# Docker 部署（已包含）
-docker run thsrite/ytb-dl:latest
-
-# 手动安装
-sudo apt install ffmpeg  # Ubuntu
-brew install ffmpeg      # macOS
-```
-
-### 🚫 无法下载特定视频
-**问题**: 某些视频下载失败（地区限制、需要登录）
-**解决方案**:
-1. **使用 Cookie 文件**:
-   - 浏览器登录 YouTube
-   - 导出 cookies.txt 文件
-   - 上传到 `/config/cookies.txt`
-
-2. **配置代理服务器**:
-   ```json
-   {
-     "proxy": "http://proxy:8080"
-   }
-   ```
-
-### 📱 移动端显示异常
-**问题**: 手机访问页面布局错乱
-**解决方案**:
-- 清除浏览器缓存
-- 使用现代浏览器（Chrome、Safari、Firefox）
-- 检查网络连接稳定性
-
-### 💬 企业微信通知失败
-**问题**: 下载完成后没有收到企业微信通知
-**解决方案**:
-```json
-{
-  "wecom": {
-    "corp_id": "正确的企业ID",
-    "agent_id": 1000001,
-    "app_secret": "正确的应用密钥",
-    "public_base_url": "https://your-public-domain.com"
-  }
-}
-```
-
-### 🔍 视频信息获取失败
-**问题**: 点击"获取视频信息"没有响应
-**解决方案**:
-- 检查 URL 格式是否正确
-- 确认网络连接正常
-- 查看浏览器控制台错误信息
-- 尝试使用代理或 Cookie
-
-### 📦 Docker 容器启动失败
-**问题**: Docker 容器无法正常启动
-**解决方案**:
-```bash
-# 检查容器日志
-docker logs ytb-downloader
-
-# 重新拉取最新镜像
-docker pull thsrite/ytb-dl:latest
-
-# 确保端口未被占用
-sudo netstat -tlnp | grep 9832
-```
-
-## ⚠️ 注意事项
-
-### 📋 使用条款
-- ✅ 遵守 YouTube 服务条款
-- ✅ 仅下载有权访问的内容
-- ✅ 个人学习和研究用途
-- ❌ 禁止商业用途
-- ❌ 禁止批量爬取
-- ❌ 禁止侵犯版权
-
-### 🔒 安全建议
-- 🔐 定期更新 Cookie 文件
-- 🛡️ 使用 HTTPS 代理
-- 🚫 不要在公共网络使用
-- 📱 企业微信密钥妥善保管
-
-### 🎯 性能优化
-- 💾 定期清理下载历史
-- 🗂️ 合理设置并发数量
-- ⏰ 避免高峰期大量下载
-- 📊 监控磁盘空间使用
-
-## 🤝 贡献指南
-
-我们欢迎所有形式的贡献！无论是 Bug 报告、功能请求还是代码改进。
-
-### 🐛 报告 Bug
-1. 在 [Issues](https://github.com/thsrite/ytb-dl/issues) 中搜索是否已有相似问题
-2. 如果没有，创建新的 Issue
-3. 提供详细的复现步骤和环境信息
-
-### 💡 功能请求
-1. 在 [Issues](https://github.com/thsrite/ytb-dl/issues) 中描述新功能
-2. 说明功能的使用场景和价值
-3. 如果可能，提供实现思路
-
-### 🔧 代码贡献
+远程创建下载任务示例：
 
 ```bash
-# 1. Fork 并克隆仓库
-git clone https://github.com/your-username/ytb-dl.git
-cd ytb-dl
-
-# 2. 创建功能分支
-git checkout -b feature/amazing-feature
-
-# 3. 安装开发依赖
-pip install -r requirements.txt
-pip install -r requirements-dev.txt  # 如果存在
-
-# 4. 进行开发并测试
-python main.py
-
-# 5. 提交更改
-git add .
-git commit -m "feat: add amazing feature
-
-- Add new functionality X
-- Improve Y performance
-- Fix Z bug"
-
-# 6. 推送分支
-git push origin feature/amazing-feature
-
-# 7. 创建 Pull Request
+curl -X POST "http://<NAS-IP>:9832/api/download" \
+  -H "Authorization: Bearer <API_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://www.youtube.com/watch?v=example","format_id":null}'
 ```
 
-### 📝 代码规范
-- 使用 **Python 3.11+**
-- 遵循 **PEP 8** 代码风格
-- 添加适当的**注释和文档字符串**
-- 新功能需要添加**对应的测试**
+### Cookie
 
-### 🏗️ 开发环境设置
+如果视频需要登录态，可以在 Web 设置中上传或指定 `cookies.txt`。
 
-```bash
-# 克隆项目
-git clone https://github.com/thsrite/ytb-dl.git
-cd ytb-dl
+推荐方式：
 
-# 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
+1. 在浏览器安装 Get cookies.txt 一类扩展。
+2. 打开 YouTube 并登录账号。
+3. 导出 YouTube Cookie。
+4. 在 YTB-DL 设置中上传或填入 Cookie 文件路径。
 
-# 安装依赖
-pip install -r requirements.txt
+也可以配置 CookieCloud 自动同步。
 
-# 启动开发服务器
-python main.py
+### yt-dlp 更新
 
-# 运行测试（如果有）
-pytest
+维护版支持把新版 yt-dlp 安装到持久化目录：
 
-# Docker 开发环境
-docker-compose -f docker-compose.dev.yml up
+```text
+/app/config/python-packages
 ```
 
-## 📄 许可证
+这样即使镜像基础版本较旧，也可以通过 Web 更新按钮修复 YouTube 解析失败问题。
 
-本项目采用 **MIT 许可证** - 查看 [LICENSE](LICENSE) 文件了解详情
+## Telegram 功能
 
+### 下载通知
+
+在高级设置中填写：
+
+- Bot Token
+- Chat ID
+- 公网访问地址，可选
+- 下载开始 / 完成 / 失败通知开关
+
+下载完成通知会包含标题、作者、清晰度、大小、时长、文件路径、原始链接和任务 ID。
+
+### 发送链接自动下载
+
+启用“允许在 Telegram 发送链接触发下载”后，可以直接向配置的 Bot / 群发送 YouTube 链接。
+
+支持的链接范围：
+
+- `youtube.com`
+- `m.youtube.com`
+- `music.youtube.com`
+- 其它 YouTube 子域名
+- `youtu.be`
+
+为了避免和其它项目互相抢消息，反向下载建议使用单独的 Telegram Bot Token。Telegram Bot 的消息接收侧只能有一个消费者；多个项目可以共用同一个 Bot 发送通知，但不能同时用同一个 Bot 接收消息。
+
+如果在群里使用，并且 Bot 开启了 Privacy Mode，可以使用：
+
+```text
+/dl@你的机器人用户名 https://www.youtube.com/watch?v=example
 ```
-MIT License
 
-Copyright (c) 2025 thsrite
+或在 BotFather 中关闭该 Bot 的群隐私模式。
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software...
+## 暴力猴远程推送脚本
+
+脚本位置：
+
+```text
+tools/ytb-dl-violentmonkey.user.js
 ```
 
-## 📞 联系方式
+安装后在 YouTube 视频页会出现远程下载按钮。脚本支持：
 
-| 联系方式 | 链接 | 说明 |
-|----------|------|------|
-| 🐙 **GitHub** | [@thsrite](https://github.com/thsrite) | 项目主页和源码 |
-| 🐛 **Issues** | [报告问题](https://github.com/thsrite/ytb-dl/issues) | Bug报告和功能请求 |
-| 📋 **Discussions** | [项目讨论](https://github.com/thsrite/ytb-dl/discussions) | 社区讨论和问答 |
-| 🐳 **Docker Hub** | [ytb-dl](https://hub.docker.com/r/thsrite/ytb-dl) | Docker 镜像仓库 |
+- 配置 YTB-DL 服务地址。
+- 配置 API Token。
+- 解析当前视频。
+- 选择清晰度。
+- 推送远程下载任务。
+- 保存常用设置。
 
-## 📊 项目统计
+脚本调用的是 YTB-DL 的 API，因此服务端必须开启并正确配置 `API_TOKEN`。
 
-![GitHub stars](https://img.shields.io/github/stars/thsrite/ytb-dl?style=social)
-![GitHub forks](https://img.shields.io/github/forks/thsrite/ytb-dl?style=social)
-![GitHub issues](https://img.shields.io/github/issues/thsrite/ytb-dl)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/thsrite/ytb-dl)
-![Docker Pulls](https://img.shields.io/docker/pulls/thsrite/ytb-dl)
+## API 简表
 
-## 📈 更新日志
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/auth/login` | Web 登录 |
+| `GET` | `/api/auth/status` | 登录状态 |
+| `POST` | `/api/video-info` | 获取视频信息 |
+| `POST` | `/api/download` | 创建下载任务 |
+| `GET` | `/api/downloads/{task_id}` | 查询任务状态 |
+| `GET` | `/api/history` | 下载历史 |
+| `GET` | `/api/config` | 获取配置 |
+| `POST` | `/api/config` | 保存配置 |
+| `POST` | `/api/telegram/test` | 测试 Telegram 推送 |
 
-### v1.0.6 (2025-09-30) 🎬
-- ✨ **FFmpeg 视频转码功能**
-  - 支持 AV1 视频自动检测和转码
-  - 实时转码进度跟踪，显示已转时间和剩余时间
-  - 支持多种硬件加速预设（Intel QSV、NVIDIA、AMD、VideoToolbox）
-  - 自定义 FFmpeg 命令参数配置
-  - 转码后自动删除原始文件，保留转码文件
+除登录相关接口外，API 需要 Cookie Session 或 API Token。
 
-- 🔄 **自动化与优化**
-  - 认证失败时自动刷新 Cookie（CookieCloud/浏览器）
-  - Docker 环境支持 yt-dlp 在线更新（使用 --user 参数）
-  - 转码任务取消时正确终止 FFmpeg 进程
+## 项目结构
 
-- 🐛 **Bug 修复**
-  - 修复 FFmpeg 配置无法持久化的问题
-  - 修复历史记录转码状态显示问题
-  - 修复 404 接口重复调用问题
-  - 修复重新下载功能的 task_id 处理
-  - 修复转码时删除任务的文件清理逻辑
+```text
+.
+├── frontend/                  # Web 前端
+├── ytb/                       # 下载、配置、Cookie、更新等核心逻辑
+├── telegram/                  # Telegram 推送和 Bot API 封装
+├── tools/                     # 暴力猴远程推送脚本
+├── deploy/synology/           # 群晖部署辅助文件
+├── docs/images/               # README 截图
+├── main.py                    # FastAPI 服务入口
+├── Dockerfile
+├── docker-compose.yml
+└── README.md
+```
 
-### v1.0.5 (2025-09-29) 🚀
-- 🔃 获取视频信息时检测到 Cookie 失效后，会自动同步 CookieCloud/浏览器最新 Cookie 并落盘
-- 🎞️ Docker 镜像内置 Intel Quick Sync / VA-API 支持，可直接使用核显加速转码
-- 🐳 GitHub Actions 限定 `linux/amd64` 构建，避免跨架构导致的构建失败
-- 🐍 运行阶段使用独立虚拟环境安装依赖，保持系统 Python 环境干净
+## 维护说明
 
-### v1.0.4 (2025-09-26) 🚀
-- 优化消息发送模版
-- 优化移动端页面细节
+本维护版重点解决以下问题：
 
-### v1.0.3 (2025-09-25) 🚀
-- ✨ **消息通知系统全面优化**
-  - 统一消息模板架构，确保 WeChat 和 Web 端通知格式一致
-  - 抽离消息模板为独立模块，提高代码复用性
-  - 管理员通知标题优化，显示实际视频标题而非任务ID
+- 原项目浏览器 Cookie 提取在 Docker / NAS 环境中不可用。
+- YouTube 解析经常因 yt-dlp 版本过旧而失败。
+- 单独下载视频流时容易出现无声音文件。
+- 原项目缺少登录保护，不适合公网或反代暴露。
+- 缺少适合移动端、Telegram 和浏览器脚本的远程推送入口。
+- 企业微信相关功能已移除，当前维护方向以 Telegram 和开放 API 为主。
 
-- 🔄 **错误处理与自动重试机制**
-  - 403 错误智能处理：自动同步 CookieCloud 或浏览器 Cookie 后重试
-  - 网络错误自动重试：支持指数退避策略，最多重试 3 次
-  - Web 端下载支持 403 错误实时通知（之前仅 WeChat 端支持）
-  - 错误恢复后自动发送成功通知
+## 致谢
 
-- 📱 **企业微信集成增强**
-  - 403 错误回调设置时机优化，确保首次错误即可收到通知
-  - 支持网络错误、Cookie 同步等多种状态的实时推送
-  - 管理员通知格式统一，包含更详细的错误信息和建议
+感谢原项目 [thsrite/ytb-dl](https://github.com/thsrite/ytb-dl) 提供基础实现。本项目在其基础上进行了面向个人 NAS 使用场景的修复、重构和功能扩展。
 
-- 🎨 **UI/UX 改进**
-  - 下载历史批量删除功能
-  - Cookie 数量实时显示优化
-  - 错误提示信息更加友好和具体
+## License
 
-- 🐛 **Bug 修复**
-  - 修复微信下载 403 错误时未发送初始通知的问题
-  - 修复批量删除重复确认对话框的问题
-  - 修复管理员通知中下载链接错误的问题
-  - 修复 asyncio 事件循环在线程中的兼容性问题
-
-### v1.0.2 (2025-09-25) 🎉
-- ✨ CookieCloud 集成
-  - 支持自动同步 cookies
-  - 可配置同步间隔（默认30分钟）
-  - AES-256-CBC 加密传输
-- ✨ 浏览器 Cookie 提取
-  - 支持 Chrome、Edge、Firefox 等主流浏览器
-  - 自动检测并提取 YouTube cookies
-  - 每25分钟自动刷新
-- ✨ yt-dlp 在线更新
-  - 检测最新版本
-  - 一键在线更新
-  - 显示更新日志
-- 🎨 UI/UX 改进
-  - 优化 Cookie 管理界面
-  - 改进移动端适配
-  - 增强状态提示可见性
-- 🐛 修复若干已知问题
-
-### v1.0.1 (2025-09-25) ✅
-- ✅ Docker 部署优化
-- ✅ 修复yt-dlp自定义参数
-- ✅ 初步支持Cookie管理
-
-### v1.0.0 (2025-09-25) ✅
-- ✅ Docker 部署优化
-- ✅ GitHub Actions CI/CD
-- ✅ 性能优化和缓存
-- ✅ 错误处理改进
-- ✅ API 文档完善
-
-### v0.0.1 (2025-09-24) ✅
-- ✅ 基础视频下载功能
-- ✅ 企业微信通知集成
-- ✅ 现代化 Web 界面
-- ✅ 实时下载进度监控
-- ✅ Cookie 和代理支持
-- ✅ 下载历史记录管理
-- ✅ 响应式移动端界面
-- ✅ 文件大小智能预估
-- ✅ MP4+M4A 格式优化
-
----
-
-<div align="center">
-
-**⭐ 如果这个项目对你有帮助，请给个 Star！⭐**
-
-Made with ❤️ by [thsrite](https://github.com/thsrite)
-
-</div>
+本项目沿用原项目许可证。详见 [LICENSE](LICENSE)。

@@ -68,16 +68,18 @@ RUN rm -rf /usr/src/ffmpeg
 FROM ubuntu:24.04
 
 ARG TARGETARCH
+ARG DENO_VERSION=2.8.1
 RUN if [ "${TARGETARCH:-amd64}" != "amd64" ]; then \
         echo "Intel Quick Sync runtime is only supported on amd64; requested ${TARGETARCH}" >&2; \
         exit 1; \
     fi
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONPATH=/app \
+    PYTHONPATH=/app/config/python-packages:/app \
     PYTHONUNBUFFERED=1 \
+    YTDLP_UPDATE_DIR=/app/config/python-packages \
     VIRTUAL_ENV=/opt/venv \
-    PATH=/opt/venv/bin:/usr/local/bin:$PATH
+    PATH=/app/config/bin:/opt/venv/bin:/usr/local/bin:$PATH
 
 RUN printf '%s\n' \
         'deb http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse' \
@@ -108,6 +110,11 @@ RUN apt-get update && \
 
 # Copy FFmpeg from the build stage
 COPY --from=ffmpeg-builder /usr/local /usr/local
+
+RUN wget -qO /tmp/deno.zip "https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip" && \
+    python3 -c "import zipfile; zipfile.ZipFile('/tmp/deno.zip').extract('deno', '/usr/local/bin')" && \
+    chmod +x /usr/local/bin/deno && \
+    rm -f /tmp/deno.zip
 
 WORKDIR /app
 

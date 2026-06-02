@@ -1,12 +1,20 @@
 from fastapi import FastAPI, WebSocket, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse, PlainTextResponse
+from fastapi.responses import FileResponse, StreamingResponse, PlainTextResponse, HTMLResponse, JSONResponse, RedirectResponse
+import asyncio
 import os
 import logging
 import httpx
+import base64
+import hashlib
+import hmac
+import json
+import re
+import secrets
+import time
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from ytb.models import (
     VideoInfoRequest, VideoInfo, DownloadRequest
@@ -16,8 +24,7 @@ from ytb.config import Config
 from ytb.history_manager import HistoryManager
 from ytb.updater import YtDlpUpdater
 from ytb.browser_cookies import BrowserCookieExtractor
-from wecom import WeComService
-from wecom.message_templates import MessageTemplates
+from telegram import TelegramService
 from version import __version__
 
 app = FastAPI(title="YouTube Video Downloader API")
@@ -41,8 +48,8 @@ config = Config()
 # Initialize history manager
 history_manager = HistoryManager()
 
-# Initialize WeCom integration
-wecom_service = WeComService(config, downloader, history_manager)
+# Initialize Telegram notifications
+telegram_service = TelegramService(config)
 
 # Initialize yt-dlp updater
 updater = YtDlpUpdater()
@@ -53,9 +60,364 @@ cookie_extractor = BrowserCookieExtractor(cookiecloud_config=config.get_cookiecl
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # WebSocket connections
 active_connections: List[WebSocket] = []
+telegram_polling_task: Optional[asyncio.Task] = None
+telegram_update_offset: Optional[int] = None
+TELEGRAM_YOUTUBE_URL_RE = re.compile(
+    r"https?://(?:(?:[a-z0-9-]+\.)*youtube\.com|youtu\.be)/[^\s<>\"]+",
+    re.IGNORECASE,
+)
+
+AUTH_COOKIE_NAME = "ytb_dl_session"
+SESSION_MAX_AGE = 7 * 24 * 60 * 60
+AUTH_PUBLIC_PATHS = {
+    "/login",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/status",
+}
+
+
+def _display_download_path(filepath: Optional[str]) -> Optional[str]:
+    if not filepath:
+        return None
+
+    host_download_path = os.environ.get("HOST_DOWNLOAD_PATH", "").rstrip("/")
+    if not host_download_path:
+        return filepath
+
+    container_download_dir = os.path.abspath(download_dir)
+    absolute_path = os.path.abspath(filepath)
+    if absolute_path == container_download_dir:
+        return host_download_path
+    if absolute_path.startswith(container_download_dir + os.sep):
+        return host_download_path + absolute_path[len(container_download_dir):].replace(os.sep, "/")
+    return filepath
+
+
+def _auth_config_path() -> str:
+    if os.path.exists("/app"):
+        return "/app/config/auth.json"
+    return os.path.join("config", "auth.json")
+
+
+def _load_auth_settings() -> dict:
+    """Load or create auth settings without committing secrets to the repo."""
+    auth_path = _auth_config_path()
+    os.makedirs(os.path.dirname(auth_path), exist_ok=True)
+
+    settings = {}
+    if os.path.exists(auth_path):
+        try:
+            with open(auth_path, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load auth config, regenerating missing fields: {e}")
+
+    changed = False
+    if not settings.get("username"):
+        settings["username"] = os.environ.get("WEB_AUTH_USERNAME", "admin")
+        changed = True
+    if not settings.get("password"):
+        settings["password"] = os.environ.get("WEB_AUTH_PASSWORD") or secrets.token_urlsafe(18)
+        changed = True
+    if not settings.get("api_token"):
+        settings["api_token"] = os.environ.get("API_TOKEN") or secrets.token_urlsafe(32)
+        changed = True
+    if not settings.get("session_secret"):
+        settings["session_secret"] = os.environ.get("AUTH_SECRET") or secrets.token_urlsafe(32)
+        changed = True
+
+    for key, env_name in (
+        ("username", "WEB_AUTH_USERNAME"),
+        ("password", "WEB_AUTH_PASSWORD"),
+        ("api_token", "API_TOKEN"),
+        ("session_secret", "AUTH_SECRET"),
+    ):
+        if os.environ.get(env_name):
+            settings[key] = os.environ[env_name]
+
+    if changed or not os.path.exists(auth_path):
+        with open(auth_path, "w", encoding="utf-8") as f:
+            json.dump(settings, f, indent=2, ensure_ascii=False)
+        try:
+            os.chmod(auth_path, 0o600)
+        except OSError:
+            pass
+
+    return settings
+
+
+def _b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _sign_session(payload: str, secret: str) -> str:
+    digest = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).digest()
+    return _b64url(digest)
+
+
+def _create_session(username: str) -> str:
+    settings = _load_auth_settings()
+    expires = int(time.time()) + SESSION_MAX_AGE
+    payload = _b64url(f"{username}:{expires}".encode("utf-8"))
+    signature = _sign_session(payload, settings["session_secret"])
+    return f"{payload}.{signature}"
+
+
+def _verify_session_cookie(token: Optional[str]) -> bool:
+    if not token or "." not in token:
+        return False
+
+    settings = _load_auth_settings()
+    payload, signature = token.rsplit(".", 1)
+    expected = _sign_session(payload, settings["session_secret"])
+    if not hmac.compare_digest(signature, expected):
+        return False
+
+    try:
+        padded = payload + "=" * (-len(payload) % 4)
+        decoded = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+        username, expires_raw = decoded.rsplit(":", 1)
+        return username == settings["username"] and int(expires_raw) >= int(time.time())
+    except Exception:
+        return False
+
+
+def _token_from_request(request: Request) -> Optional[str]:
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip()
+    return request.headers.get("x-api-token") or request.query_params.get("token")
+
+
+def _verify_api_token(request: Request) -> bool:
+    token = _token_from_request(request)
+    settings = _load_auth_settings()
+    return bool(token) and hmac.compare_digest(token, settings["api_token"])
+
+
+def _is_authenticated(request: Request) -> bool:
+    return _verify_api_token(request) or _verify_session_cookie(request.cookies.get(AUTH_COOKIE_NAME))
+
+
+@app.on_event("startup")
+async def start_background_tasks():
+    global telegram_polling_task
+    if telegram_polling_task is None or telegram_polling_task.done():
+        telegram_polling_task = asyncio.create_task(telegram_polling_loop())
+
+
+@app.on_event("shutdown")
+async def stop_background_tasks():
+    if telegram_polling_task and not telegram_polling_task.done():
+        telegram_polling_task.cancel()
+
+
+async def telegram_polling_loop() -> None:
+    global telegram_update_offset
+    initialized = False
+
+    while True:
+        try:
+            if not telegram_service.bot_downloads_enabled():
+                initialized = False
+                await asyncio.sleep(10)
+                continue
+
+            if not initialized:
+                updates = await telegram_service.get_updates(timeout=0)
+                if updates:
+                    telegram_update_offset = max(item.get("update_id", 0) for item in updates) + 1
+                initialized = True
+
+            updates = await telegram_service.get_updates(offset=telegram_update_offset, timeout=25)
+            if updates is None:
+                await asyncio.sleep(10)
+                continue
+
+            for update in updates:
+                update_id = update.get("update_id")
+                if isinstance(update_id, int):
+                    telegram_update_offset = max(telegram_update_offset or 0, update_id + 1)
+
+                message = update.get("message") or update.get("channel_post") or {}
+                chat = message.get("chat") or {}
+                urls = _extract_telegram_urls(message)
+                if not urls:
+                    continue
+
+                chat_id = str(chat.get("id", "")).strip()
+                if chat_id != telegram_service.allowed_chat_id():
+                    logger.info("Ignored Telegram YouTube link from unauthorized chat %s", chat_id)
+                    if chat_id:
+                        await telegram_service.send_message(
+                            "YTB-DL 收到 YouTube 链接，但当前会话未授权。\n\n"
+                            f"当前 Chat ID：{chat_id}\n"
+                            "请把高级设置里的 Chat ID 改成这个值，或在已配置的会话里发送链接。",
+                            chat_id=chat_id,
+                        )
+                    continue
+
+                for url in urls:
+                    asyncio.create_task(start_telegram_download(url))
+
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.error("Telegram polling loop failed: %s", exc)
+            await asyncio.sleep(10)
+
+
+def _extract_telegram_urls(message: dict) -> List[str]:
+    seen = set()
+    urls = []
+    text = message.get("text") or message.get("caption") or ""
+    entities = message.get("entities") or message.get("caption_entities") or []
+
+    candidates = TELEGRAM_YOUTUBE_URL_RE.findall(text or "")
+    for entity in entities:
+        if (
+            entity.get("type") == "text_link"
+            and entity.get("url")
+            and TELEGRAM_YOUTUBE_URL_RE.match(entity["url"])
+        ):
+            candidates.append(entity["url"])
+
+    for match in candidates:
+        url = match.rstrip(".,;，。；)]}>")
+        if url and url not in seen:
+            seen.add(url)
+            urls.append(url)
+    return urls
+
+
+async def start_telegram_download(url: str) -> None:
+    try:
+        await telegram_service.send_message(f"📥 YTB-DL 已收到下载链接\n\n🔗 链接：{url}")
+        result = await start_download(DownloadRequest(url=url, format_id=None), source="Telegram")
+        task_id = result.get("task_id", "")
+        if task_id:
+            await telegram_service.send_message(f"🧾 YTB-DL 下载任务已创建\n\n🔗 链接：{url}\n🧾 任务：{task_id}")
+    except Exception as exc:
+        logger.error("Failed to start Telegram download for %s: %s", url, exc)
+        await telegram_service.send_message(f"❌ YTB-DL 无法创建下载任务\n\n🔗 链接：{url}\n⚠️ 错误：{exc}")
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    if path in AUTH_PUBLIC_PATHS:
+        return await call_next(request)
+
+    if not _is_authenticated(request):
+        if path.startswith("/api/"):
+            return JSONResponse({"detail": "Authentication required"}, status_code=401)
+        return RedirectResponse("/login", status_code=303)
+
+    return await call_next(request)
+
+
+@app.get("/login")
+async def login_page(request: Request):
+    if _is_authenticated(request):
+        return RedirectResponse("/", status_code=303)
+
+    return HTMLResponse("""
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登录 - YTB-DL</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0f172a;color:#e5e7eb;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    form{width:min(360px,calc(100vw - 40px));display:grid;gap:14px}
+    h1{font-size:24px;margin:0 0 8px}
+    input,button{height:42px;border-radius:6px;border:1px solid #334155;background:#111827;color:#e5e7eb;padding:0 12px;font-size:15px}
+    button{background:#2563eb;border-color:#2563eb;cursor:pointer;font-weight:600}
+    p{min-height:22px;margin:0;color:#fca5a5;font-size:14px}
+  </style>
+</head>
+<body>
+  <form id="login-form">
+    <h1>YTB-DL</h1>
+    <input id="username" name="username" autocomplete="username" placeholder="用户名" required />
+    <input id="password" name="password" type="password" autocomplete="current-password" placeholder="密码" required />
+    <button type="submit">登录</button>
+    <p id="message"></p>
+  </form>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const message = document.getElementById('message');
+      message.textContent = '';
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          username: document.getElementById('username').value,
+          password: document.getElementById('password').value
+        })
+      });
+      if (response.ok) {
+        location.href = '/';
+      } else {
+        message.textContent = '用户名或密码错误';
+      }
+    });
+  </script>
+</body>
+</html>
+""")
+
+
+@app.post("/api/auth/login")
+async def login(request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+
+    settings = _load_auth_settings()
+    username_ok = hmac.compare_digest(str(data.get("username", "")), settings["username"])
+    password_ok = hmac.compare_digest(str(data.get("password", "")), settings["password"])
+    if not (username_ok and password_ok):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    response = JSONResponse({"success": True})
+    response.set_cookie(
+        AUTH_COOKIE_NAME,
+        _create_session(settings["username"]),
+        max_age=SESSION_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
+
+
+@app.post("/api/auth/logout")
+async def logout():
+    response = JSONResponse({"success": True})
+    response.delete_cookie(AUTH_COOKIE_NAME)
+    return response
+
+
+@app.get("/api/auth/status")
+async def auth_status(request: Request):
+    settings = _load_auth_settings()
+    return {
+        "authenticated": _is_authenticated(request),
+        "username": settings["username"] if _is_authenticated(request) else None,
+        "token_auth_available": bool(settings.get("api_token")),
+    }
 
 
 @app.get("/")
@@ -90,96 +452,59 @@ async def get_video_info(request: VideoInfoRequest):
 
 
 @app.post("/api/download")
-async def start_download(request: DownloadRequest):
+async def start_download(request: DownloadRequest, source: str = "Web"):
     """开始下载视频"""
     try:
         # Generate task_id early
         import uuid
         task_id = str(uuid.uuid4())
+        selected_format_id = request.format_id
 
         # Set up 403/network error notification callback for Web downloads
         async def web_error_callback(task_id: str, url: str, status: str, retry_count: int = 0, final: bool = False, success: bool = False):
             """Handle 403 and network error notifications for Web downloads"""
-            # Get title from history or use a default
             entry = history_manager.get_entry(task_id)
             title = entry.get("title", "Unknown") if entry else "Unknown"
-
-            # Determine error type
             is_network_error = "[网络错误]" in status
 
             if success:
-                # Recovery notification
-                if is_network_error:
-                    error_msg = "网络错误已恢复"
-                else:
-                    error_msg = "Cookie刷新成功，下载已恢复"
-
-                await notify_wecom_admins(
+                error_msg = "网络错误已恢复" if is_network_error else "Cookie刷新成功，下载已恢复"
+                await notify_telegram(
                     task_id=task_id,
                     title=title,
                     url=url,
-                    source="Web",
-                    status="started",
-                    error_message=error_msg
+                    source=source,
+                    status="completed",
+                    error_message=error_msg,
+                    format_id=selected_format_id
                 )
             elif final:
-                # Final failure notification
-                if is_network_error:
-                    error_msg = f"网络连接错误（重试{retry_count}次失败）"
-                else:
-                    error_msg = f"403 Forbidden - 需要登录（重试{retry_count}次失败）"
-
-                await notify_wecom_admins(
+                error_msg = (
+                    f"网络连接错误（重试{retry_count}次失败）"
+                    if is_network_error
+                    else f"403 Forbidden - 需要登录（重试{retry_count}次失败）"
+                )
+                await notify_telegram(
                     task_id=task_id,
                     title=title,
                     url=url,
-                    source="Web",
+                    source=source,
                     status="error",
-                    error_message=error_msg
+                    error_message=error_msg,
+                    format_id=selected_format_id
                 )
             else:
-                # Progress notification - use a specific status to indicate retry
                 clean_status = status.replace("[网络错误] ", "")
-
-                # Create a notification using the template
-                if is_network_error:
-                    notification = MessageTemplates.format_admin_notification(
-                        task_id=task_id,
-                        status='network_retry',
-                        user_id="Web User",
-                        source="Web",
-                        url=url,
-                        title=title,
-                        error_msg=f"网络错误: {clean_status}",
-                        retry_count=retry_count
-                    )
-                else:
-                    notification = MessageTemplates.format_admin_notification(
-                        task_id=task_id,
-                        status='403_retry',
-                        user_id="Web User",
-                        source="Web",
-                        url=url,
-                        title=title,
-                        error_msg=clean_status,
-                        retry_count=retry_count
-                    )
-
-                # Send notification to admins
-                wecom_config = config.get_wecom_config()
-                if wecom_config.get("notify_admin", False) and wecom_service and wecom_service.client:
-                    admin_users = wecom_config.get("admin_users", [])
-                    for admin in admin_users:
-                        try:
-                            await wecom_service.client.send_news(
-                                title=notification['title'],
-                                description=notification['description'],
-                                url=notification['url'] or url,
-                                touser=admin
-                            )
-                            logger.info(f"403/network retry notification sent to admin {admin}")
-                        except Exception as e:
-                            logger.error(f"Failed to notify admin {admin}: {e}")
+                retry_type = "网络错误" if is_network_error else "403/Cookie 错误"
+                await notify_telegram(
+                    task_id=task_id,
+                    title=title,
+                    url=url,
+                    source=source,
+                    status="error",
+                    error_message=f"{retry_type}，第 {retry_count} 次重试：{clean_status}",
+                    format_id=selected_format_id
+                )
 
         # Get video info BEFORE starting download
         info = await downloader.get_video_info(request.url)
@@ -204,7 +529,7 @@ async def start_download(request: DownloadRequest):
         # Start download with pre-assigned task_id
         actual_task_id = await downloader.download_video_with_id(request.url, task_id, request.format_id)
 
-        # Estimate file size like in WeComService
+        # Estimate file size for notification display
         estimated_size = None
         if info.get('formats'):
             # Try to get file size from formats
@@ -217,14 +542,14 @@ async def start_download(request: DownloadRequest):
         if estimated_size:
             info['estimated_filesize'] = estimated_size
 
-        # Notify admins if enabled (Web downloads)
-        await notify_wecom_admins(
+        await notify_telegram(
             task_id=task_id,
             title=info.get("title", "Unknown"),
             url=request.url,
-            source="Web",
+            source=source,
             video_info=info,
-            status="started"
+            status="started",
+            format_id=selected_format_id
         )
 
         # Start monitoring task for completion
@@ -233,12 +558,20 @@ async def start_download(request: DownloadRequest):
             task_id=task_id,
             title=info.get("title", "Unknown"),
             url=request.url,
-            video_info=info
+            video_info=info,
+            format_id=selected_format_id,
+            source=source
         ))
 
         return {"task_id": task_id, "message": "Download started"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/remote/download")
+async def remote_download(request: DownloadRequest):
+    """Token-protected remote download entrypoint."""
+    return await start_download(request)
 
 
 @app.get("/api/download-status/{task_id}")
@@ -453,6 +786,14 @@ async def proxy_thumbnail(url: str):
 @app.websocket("/ws/progress")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket连接用于实时进度更新"""
+    settings = _load_auth_settings()
+    ws_token = websocket.query_params.get("token")
+    token_ok = bool(ws_token) and hmac.compare_digest(ws_token, settings["api_token"])
+    session_ok = _verify_session_cookie(websocket.cookies.get(AUTH_COOKIE_NAME))
+    if not (token_ok or session_ok):
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
     active_connections.append(websocket)
 
@@ -604,7 +945,10 @@ async def get_yt_dlp_version_info():
 @app.get("/api/browser-cookies/detect")
 async def detect_browsers():
     """检测可用的浏览器"""
+    browser_cookie_supported = not (cookie_extractor.is_docker and not cookie_extractor.cookie_bridge_url)
     return {
+        "supported": browser_cookie_supported,
+        "reason": None if browser_cookie_supported else "Docker/NAS 环境无法直接读取你电脑浏览器里的 Cookies",
         "available_browsers": cookie_extractor.detect_available_browsers(),
         "system_info": cookie_extractor.get_system_info()
     }
@@ -615,6 +959,13 @@ async def import_browser_cookies(request: dict):
     """从浏览器导入cookies"""
     browser = request.get('browser', 'firefox')
     domain = request.get('domain', 'youtube.com')
+
+    if cookie_extractor.is_docker and not cookie_extractor.cookie_bridge_url:
+        return {
+            "success": False,
+            "message": "Docker/NAS 环境无法直接读取你电脑浏览器里的 Cookies",
+            "error": "请使用手动上传 cookies.txt，或配置 CookieCloud 同步。"
+        }
 
     result = cookie_extractor.extract_cookies_from_browser(browser, domain)
 
@@ -650,6 +1001,7 @@ async def import_browser_cookies(request: dict):
 async def get_browser_cookie_status():
     """获取浏览器Cookie状态"""
     browser_config = config.config.get('browser_cookies', {})
+    browser_cookie_supported = not (cookie_extractor.is_docker and not cookie_extractor.cookie_bridge_url)
 
     # Check if cookies exist
     cookies_exist = os.path.exists(cookie_extractor.cookies_file)
@@ -663,6 +1015,8 @@ async def get_browser_cookie_status():
         cookies_fresh = age.total_seconds() < (25 * 60)  # Less than 25 minutes
 
     return {
+        "supported": browser_cookie_supported,
+        "reason": None if browser_cookie_supported else "Docker/NAS 环境无法直接读取你电脑浏览器里的 Cookies，请使用手动上传 cookies.txt 或 CookieCloud。",
         "enabled": browser_config.get('enabled', False),
         "browser": browser_config.get('browser', 'firefox'),
         "auto_refresh": browser_config.get('auto_refresh', True),
@@ -712,41 +1066,8 @@ async def update_config(updates: dict):
         raise HTTPException(status_code=500, detail="Failed to update config")
 
 
-@app.get("/api/wecom/config")
-async def get_wecom_config():
-    """获取企业微信集成配置"""
-    return config.get_wecom_config()
-
-
-@app.post("/api/wecom/config")
-async def update_wecom_config(updates: dict):
-    """更新企业微信集成配置并刷新服务"""
-    clean_updates = {}
-    for key, value in updates.items():
-        if key == "agent_id" and value not in (None, ""):
-            try:
-                clean_updates[key] = int(value)
-            except ValueError as exc:  # noqa: BLE001
-                raise HTTPException(status_code=400, detail="AgentID 必须是整数") from exc
-        else:
-            clean_updates[key] = value or ""
-
-    encoding_key = clean_updates.get("encoding_aes_key")
-    if encoding_key and len(encoding_key) != 43:
-        raise HTTPException(status_code=400, detail="EncodingAESKey 必须为43位")
-
-    current = config.get_wecom_config()
-    current.update(clean_updates)
-
-    if not config.update_config({"wecom": current}):
-        raise HTTPException(status_code=500, detail="保存配置失败")
-
-    wecom_service.reload_config()
-    return {"message": "WeCom config updated"}
-
-
-async def monitor_web_download(task_id: str, title: str, url: str, video_info: dict) -> None:
-    """Monitor Web download task and send completion/error notifications"""
+async def monitor_web_download(task_id: str, title: str, url: str, video_info: dict, format_id: str = None, source: str = "Web") -> None:
+    """Monitor Web download task and send completion/error notifications."""
     import asyncio
 
     try:
@@ -760,81 +1081,73 @@ async def monitor_web_download(task_id: str, title: str, url: str, video_info: d
             current = status.get("status")
 
             if current == "completed":
-                # Get actual file size if available
                 filepath = status.get("filepath")
                 if filepath and os.path.exists(filepath):
                     try:
-                        actual_size = os.path.getsize(filepath)
-                        video_info['filesize'] = actual_size
-                    except:
+                        video_info["filesize"] = os.path.getsize(filepath)
+                    except OSError:
                         pass
 
-                # Get actual video info from downloader if available
-                if status.get('video_info'):
-                    actual_info = status.get('video_info')
-                    # Update with real title and info from download
+                if status.get("video_info"):
+                    actual_info = status.get("video_info")
                     history_manager.update_entry(task_id, {
                         "status": "completed",
-                        "title": actual_info.get('title', title),
-                        "thumbnail": actual_info.get('thumbnail'),
-                        "uploader": actual_info.get('uploader'),
+                        "title": actual_info.get("title", title),
+                        "thumbnail": actual_info.get("thumbnail"),
+                        "uploader": actual_info.get("uploader"),
                         "file_path": filepath,
-                        "file_size": actual_info.get('filesize') or video_info.get('filesize')
+                        "file_size": actual_info.get("filesize") or video_info.get("filesize")
                     })
                 else:
-                    # Fallback to original update
                     history_manager.update_entry(task_id, {
                         "status": "completed",
                         "file_path": filepath,
-                        "file_size": video_info.get('filesize')
+                        "file_size": video_info.get("filesize")
                     })
 
-                # Generate download link for admins
-                wecom_config = config.get_wecom_config()
-                public_url = wecom_config.get("public_base_url", "").rstrip("/")
+                telegram_config = config.get_telegram_config()
+                public_url = telegram_config.get("public_base_url", "").rstrip("/")
                 download_link = f"{public_url}/api/download-file/{task_id}" if public_url else None
 
-                # Notify admins of completion with download link
-                await notify_wecom_admins(
+                await notify_telegram(
                     task_id=task_id,
                     title=title,
                     url=url,
-                    source="Web",
+                    source=source,
                     video_info=video_info,
                     status="completed",
-                    download_link=download_link
+                    download_link=download_link,
+                    format_id=format_id,
+                    file_path=_display_download_path(filepath)
                 )
                 break
 
-            elif current == "error":
-                error_msg = status.get("error", "未知错误")
-
-                # Update history
+            if current == "error":
+                error_msg = status.get("error", "Unknown error")
                 history_manager.update_entry(task_id, {
                     "status": "error",
                     "error_message": error_msg
                 })
 
-                # Notify admins of error
-                await notify_wecom_admins(
+                await notify_telegram(
                     task_id=task_id,
                     title=title,
                     url=url,
-                    source="Web",
+                    source=source,
                     video_info=video_info,
                     status="error",
-                    error_message=error_msg
+                    error_message=error_msg,
+                    format_id=format_id
                 )
                 break
 
     except Exception as e:
         logger.error(f"Error monitoring web download {task_id}: {e}")
     finally:
-        # Clean up task
         downloader.cleanup_task(task_id)
 
 
-async def notify_wecom_admins(
+async def notify_telegram(
     task_id: str,
     title: str,
     url: str,
@@ -842,133 +1155,35 @@ async def notify_wecom_admins(
     video_info: dict = None,
     status: str = "started",
     error_message: str = None,
-    download_link: str = None
+    download_link: str = None,
+    format_id: str = None,
+    file_path: str = None
 ) -> None:
-    """Notify admin users about download tasks from Web interface"""
-    wecom_config = config.get_wecom_config()
-
-    if not wecom_config.get("notify_admin", False):
-        return
-
-    admin_users = wecom_config.get("admin_users", [])
-    if not admin_users:
-        return
-
-    # Map status to our unified template format
-    template_status = 'start'
-    if status == "completed":
-        template_status = 'complete'
-    elif status == "error":
-        template_status = 'error'
-
-    # Format file size if available
-    file_size_text = None
-    if video_info:
-        file_size = (video_info.get("filesize") or
-                    video_info.get("filesize_approx") or
-                    video_info.get("estimated_filesize"))
-
-        if isinstance(file_size, (int, float)) and file_size > 0:
-            size_mb = file_size / (1024 * 1024)
-            if size_mb >= 1024:
-                file_size_text = f"{size_mb/1024:.1f} GB"
-            else:
-                file_size_text = f"{size_mb:.1f} MB"
-
-            if video_info.get("estimated_filesize") and not video_info.get("filesize"):
-                file_size_text += " (预估)"
-
-    # Get unified admin notification template
-    notification = MessageTemplates.format_admin_notification(
+    """Send Telegram notifications for Web download tasks."""
+    await telegram_service.send_download_notification(
         task_id=task_id,
-        status=template_status,
-        user_id="Web User",  # Web downloads don't have specific user
-        source=source,
-        url=url,
         title=title,
+        url=url,
+        source=source,
+        video_info=video_info,
+        status=status,
+        error_message=error_message,
         download_link=download_link,
-        error_msg=error_message,
-        file_size=file_size_text
+        format_id=format_id,
+        file_path=file_path,
     )
 
-    # Get proxy thumbnail URL if available
-    picurl = None
-    if video_info and video_info.get("thumbnail"):
-        public_url = wecom_config.get("public_base_url", "").rstrip("/")
-        if public_url:
-            import urllib.parse
-            encoded_thumbnail = urllib.parse.quote(video_info["thumbnail"], safe='')
-            picurl = f"{public_url}/api/proxy-thumbnail?url={encoded_thumbnail}"
 
-    # Send notification to all admins using news format
-    if wecom_service and wecom_service.client:
-        for admin in admin_users:
-            try:
-                # Use news format for better presentation
-                await wecom_service.client.send_news(
-                    title=notification['title'],
-                    description=notification['description'],
-                    picurl=picurl,
-                    url=notification['url'] or url,
-                    touser=admin
-                )
-                logger.info(f"Admin notification sent to {admin} for task {task_id} (status: {status})")
-            except Exception as e:
-                logger.error(f"Failed to notify admin {admin}: {e}")
+@app.post("/api/telegram/test")
+async def test_telegram_notification():
+    """Send a Telegram test message with the current saved settings."""
+    if not telegram_service.is_configured():
+        return {"success": False, "message": "Please enable Telegram and fill in Bot Token and Chat ID"}
 
-
-@app.post("/api/wecom/test-admin")
-async def test_admin_notification():
-    """Test admin notification"""
-    if not wecom_service:
-        raise HTTPException(status_code=503, detail="WeChat Work service is not configured")
-
-    # Reload config to get latest admin settings
-    wecom_service.reload_config()
-
-    success = await wecom_service.send_admin_test()
-
+    success = await telegram_service.send_test()
     if success:
-        admin_users = config.get_wecom_config().get("admin_users", [])
-        return {"success": True, "message": f"测试通知已发送给 {len(admin_users)} 个管理员"}
-    else:
-        admin_users = config.get_wecom_config().get("admin_users", [])
-        if not admin_users:
-            return {"success": False, "message": "请先配置管理员用户ID"}
-        elif not wecom_service.client:
-            return {"success": False, "message": "企业微信客户端未正确配置，请检查CorpID、AgentID和App Secret"}
-        else:
-            return {"success": False, "message": "发送测试通知失败，请检查配置"}
-
-
-@app.get("/api/wecom/callback")
-async def wecom_verify(
-    msg_signature: str,
-    timestamp: str,
-    nonce: str,
-    echostr: str,
-):
-    """企业微信回调URL验证"""
-    echo = wecom_service.verify_url(msg_signature, timestamp, nonce, echostr)
-    return PlainTextResponse(echo)
-
-
-@app.post("/api/wecom/callback")
-async def wecom_callback(
-    request: Request,
-    msg_signature: str,
-    timestamp: str,
-    nonce: str,
-):
-    """企业微信消息回调处理"""
-    body = (await request.body()).decode("utf-8")
-    response_text = await wecom_service.handle_callback(
-        msg_signature,
-        timestamp,
-        nonce,
-        body,
-    )
-    return PlainTextResponse(response_text)
+        return {"success": True, "message": "Telegram test message sent"}
+    return {"success": False, "message": "Telegram test failed. Check Bot Token, Chat ID, or network access."}
 
 
 @app.get("/api/config/cookies")
@@ -1131,4 +1346,9 @@ if os.path.exists(frontend_dir):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=9832, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=9832,
+        reload=os.environ.get("DEV_RELOAD") == "1",
+    )

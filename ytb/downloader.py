@@ -349,13 +349,13 @@ class YTDownloader:
 
         if is_docker:
             # Docker environment - use more permissive format chain
-            default_format = self.config.get_wecom_config().get(
+            default_format = self.config.get_download_config().get(
                 "default_format_id",
-                "best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best"
             )
         else:
             # Local environment - can be more specific
-            default_format = self.config.get_wecom_config().get(
+            default_format = self.config.get_download_config().get(
                 "default_format_id",
                 "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
             )
@@ -771,21 +771,21 @@ class YTDownloader:
         return await self.download_video_with_id(url, task_id, format_id)
 
     async def notify_403_error(self, task_id: str, url: str, status: str, retry_count: int = 0, final: bool = False, success: bool = False) -> None:
-        """Send notifications for 403 errors to admins and users via WeChat"""
+        """Send notifications for 403 errors through the registered callback."""
         # Check if there's a task-specific callback registered
         callback = self.notification_callbacks.get(task_id)
         if callback:
             await callback(task_id, url, status, retry_count, final, success)
-        # Otherwise, no notification (for non-WeChat downloads)
+        # Otherwise, no notification for this task.
 
     async def notify_network_error(self, task_id: str, url: str, status: str, retry_count: int = 0, final: bool = False, success: bool = False) -> None:
-        """Send notifications for network errors to admins and users via WeChat"""
+        """Send notifications for network errors through the registered callback."""
         # Check if there's a task-specific callback registered
         callback = self.notification_callbacks.get(task_id)
         if callback:
             # Call the same callback but with network-specific status
             await callback(task_id, url, f"[网络错误] {status}", retry_count, final, success)
-        # Otherwise, no notification (for non-WeChat downloads)
+        # Otherwise, no notification for this task.
 
     def _finalize_download(self, task_id: str, filename: str, url: str):
         """Finalize download with optional transcoding"""

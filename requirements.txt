@@ -1,6 +1,7 @@
 fastapi==0.115.6
 uvicorn==0.32.1
 yt-dlp
+yt-dlp-ejs
 python-multipart==0.0.18
 pydantic==2.10.4
 httpx==0.27.2

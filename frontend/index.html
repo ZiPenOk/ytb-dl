@@ -223,6 +223,10 @@
                                         自动刷新 (每25分钟)
                                     </label>
                                 </div>
+
+                                <div id="browser-cookie-status" class="browser-status hidden">
+                                    <span class="status-text"></span>
+                                </div>
                             </div>
 
                             <!-- CookieCloud 同步设置 -->
@@ -444,85 +448,77 @@
 
                     <div class="separator"></div>
 
-                    <!-- 企业微信集成 -->
+                    <!-- Telegram 推送 -->
                     <div class="settings-section">
-                        <h3 class="settings-subtitle">企业微信集成</h3>
-                        <p class="settings-description">配置企业微信自建应用的凭证与回调信息，方便通过企业微信触发下载。</p>
+                        <h3 class="settings-subtitle">Telegram 消息推送</h3>
+                        <p class="settings-description">配置 Telegram Bot 推送下载开始、完成和失败消息。</p>
 
                         <div class="settings-grid">
                             <div class="settings-col">
-                                <label class="input-label">CorpID</label>
-                                <input type="text" id="wecom-corp-id" class="input" placeholder="企业ID">
+                                <label class="input-label">Bot Token</label>
+                                <input type="password" id="telegram-bot-token" class="input" placeholder="例如 123456:ABC-DEF...">
                             </div>
                             <div class="settings-col">
-                                <label class="input-label">AgentID</label>
-                                <input type="number" id="wecom-agent-id" class="input" placeholder="应用AgentID">
+                                <label class="input-label">Chat ID</label>
+                                <input type="text" id="telegram-chat-id" class="input" placeholder="个人、群组或频道 Chat ID">
                             </div>
                         </div>
 
                         <div class="settings-grid">
                             <div class="settings-col">
-                                <label class="input-label">App Secret</label>
-                                <input type="password" id="wecom-app-secret" class="input" placeholder="应用Secret">
+                                <label class="input-label">公网访问地址（可选）</label>
+                                <input type="text" id="telegram-public-url" class="input" placeholder="例如 https://example.com">
                             </div>
-                            <div class="settings-col">
-                                <label class="input-label">Token</label>
-                                <input type="text" id="wecom-token" class="input" placeholder="回调Token">
-                            </div>
-                        </div>
-
-                        <div class="settings-grid">
-                            <div class="settings-col">
-                                <label class="input-label">EncodingAESKey</label>
-                                <input type="text" id="wecom-encoding-key" class="input" placeholder="43位EncodingAESKey">
-                            </div>
-                            <div class="settings-col">
-                                <label class="input-label">公网回调基础URL</label>
-                                <input type="text" id="wecom-public-url" class="input" placeholder="例如 https://example.com">
-                            </div>
-                        </div>
-
-                        <div class="settings-grid">
                             <div class="settings-col">
                                 <label class="input-label">默认下载格式表达式</label>
-                                <input type="text" id="wecom-default-format" class="input"
-                                       value="bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best">
-                            </div>
-                            <div class="settings-col">
-                                <label class="input-label">代理域名（可选）</label>
-                                <input type="text" id="wecom-proxy-domain" class="input" placeholder="例如 https://proxy.example.com">
+                                <input type="text" id="download-default-format" class="input"
+                                       value="bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best">
                             </div>
                         </div>
-
-                        <!-- 管理员通知设置 -->
-                        <h4 class="settings-subtitle">管理员通知设置</h4>
-                        <p class="settings-description">设置管理员用户，所有下载任务都会通知管理员</p>
 
                         <div class="settings-grid">
                             <div class="settings-col">
                                 <label class="settings-label">
-                                    <input type="checkbox" id="wecom-notify-admin">
-                                    启用管理员通知
+                                    <input type="checkbox" id="telegram-enabled">
+                                    启用 Telegram 推送
+                                </label>
+                            </div>
+                            <div class="settings-col">
+                                <label class="settings-label">
+                                    <input type="checkbox" id="telegram-notify-start">
+                                    下载开始时推送
                                 </label>
                             </div>
                         </div>
 
                         <div class="settings-grid">
-                            <div class="settings-col" style="grid-column: 1 / -1;">
-                                <label class="input-label">管理员用户ID列表（多个用逗号分隔）</label>
-                                <input type="text" id="wecom-admin-users" class="input"
-                                       placeholder="例如: zhangsan,lisi,wangwu"
-                                       style="width: 100%;">
-                                <small style="color: #888; display: block; margin-top: 5px;">
-                                    提示：管理员自己的下载不会重复通知，其他用户的下载都会通知所有管理员
-                                </small>
+                            <div class="settings-col">
+                                <label class="settings-label">
+                                    <input type="checkbox" id="telegram-enable-bot-downloads">
+                                    允许在 Telegram 发送链接触发下载
+                                </label>
+                            </div>
+                            <div class="settings-col">
+                                <label class="settings-label">
+                                    <input type="checkbox" id="telegram-notify-success">
+                                    下载完成时推送
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="settings-grid">
+                            <div class="settings-col">
+                                <label class="settings-label">
+                                    <input type="checkbox" id="telegram-notify-error">
+                                    下载失败时推送
+                                </label>
                             </div>
                         </div>
 
                         <div class="settings-grid" style="margin-top: 10px;">
                             <div class="settings-col">
-                                <button id="test-admin-notify-btn" class="btn btn-outline">
-                                    测试管理员通知
+                                <button id="test-telegram-btn" class="btn btn-outline" type="button">
+                                    测试 Telegram 推送
                                 </button>
                             </div>
                         </div>

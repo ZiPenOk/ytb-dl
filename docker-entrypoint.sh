@@ -2,10 +2,10 @@
 set -e
 
 # Create directories if they don't exist
-mkdir -p /app/downloads /app/config
+mkdir -p /app/downloads /app/config /app/config/python-packages /app/config/bin
 
 # Set proper permissions
-chmod 755 /app/downloads /app/config
+chmod 755 /app/downloads /app/config /app/config/python-packages /app/config/bin
 
 # Note: Config file will be created automatically by the Python application
 # This ensures consistency between the entrypoint script and Python default config
