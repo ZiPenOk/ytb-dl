@@ -58,6 +58,7 @@ const elements = {
     // History
     historyList: document.getElementById('history-list'),
     noHistory: document.getElementById('no-history'),
+    refreshHistoryBtn: document.getElementById('refresh-history-btn'),
 
     // Settings
     cookiesStatus: document.getElementById('cookies-status'),
@@ -173,6 +174,7 @@ function initEventListeners() {
     elements.saveFileBtn.addEventListener('click', saveFile);
     elements.redownloadBtn.addEventListener('click', redownloadVideo);
     elements.newDownloadBtn.addEventListener('click', resetDownload);
+    elements.refreshHistoryBtn.addEventListener('click', refreshHistory);
 
     // Settings event listeners
     elements.saveCookiesBtn.addEventListener('click', saveCookies);
@@ -1144,6 +1146,36 @@ async function loadHistory() {
         displayHistory(history);
     } catch (error) {
         console.error('Error loading history:', error);
+    }
+}
+
+async function refreshHistory() {
+    const button = elements.refreshHistoryBtn;
+    if (!button || button.disabled) {
+        return;
+    }
+
+    const label = button.querySelector('span');
+    const originalLabel = label ? label.textContent : '';
+    button.disabled = true;
+    button.classList.add('is-refreshing');
+    if (label) {
+        label.textContent = '刷新中';
+    }
+
+    try {
+        // Refresh persisted history first, then query every active task.
+        await loadHistory();
+        await updateAllDownloadingTasks();
+        await loadHistory();
+    } catch (error) {
+        console.error('Error refreshing history:', error);
+    } finally {
+        button.disabled = false;
+        button.classList.remove('is-refreshing');
+        if (label) {
+            label.textContent = originalLabel;
+        }
     }
 }
 

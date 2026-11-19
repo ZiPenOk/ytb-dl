@@ -41,7 +41,7 @@ class TelegramService:
         payload = {
             "chat_id": target_chat_id,
             "text": text,
-            "disable_web_page_preview": True,
+            "disable_web_page_preview": False,
         }
 
         try:

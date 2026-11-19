@@ -457,6 +457,15 @@ body {
     margin-bottom: 0;
 }
 
+#history-tab .card-header .history-header-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-left: auto;
+}
+
 #history-tab .card-header .history-actions-bar {
     flex: 0 0 auto;
     display: flex;
@@ -467,6 +476,27 @@ body {
     border: none;
     margin: 0;
     margin-left: auto;
+}
+
+.history-refresh-btn {
+    flex: 0 0 auto;
+    box-shadow: none;
+    white-space: nowrap;
+}
+
+.history-refresh-btn svg {
+    width: 16px;
+    height: 16px;
+    transition: transform 0.3s ease;
+}
+
+.history-refresh-btn.is-refreshing svg {
+    animation: spin 0.8s linear infinite;
+}
+
+.history-refresh-btn:disabled {
+    cursor: wait;
+    opacity: 0.7;
 }
 
 .history-item {
@@ -1854,6 +1884,23 @@ body {
         text-align: center;
         margin: 0;
         margin-bottom: 2px;
+    }
+
+    #history-tab .card-header .history-header-actions {
+        gap: 6px;
+    }
+
+    .history-refresh-btn {
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border-radius: 12px;
+        font-size: 0;
+    }
+
+    .history-refresh-btn svg {
+        width: 18px;
+        height: 18px;
     }
 
     .history-actions-bar {
