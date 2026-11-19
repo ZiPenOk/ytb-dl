@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube 视频下载器</title>
-    <link rel="stylesheet" href="./css/styles.css">
+    <link rel="stylesheet" href="./css/styles.css?v=1.0.8">
 </head>
 <body>
     <div class="container">
@@ -158,29 +158,26 @@
             <div class="card">
                 <div class="card-header">
                     <h2 class="card-title">下载历史</h2>
-                    <div class="history-header-actions">
-                        <button type="button" class="btn btn-outline btn-small history-refresh-btn" id="refresh-history-btn" title="刷新下载状态" aria-label="刷新下载状态">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
-                                <polyline points="21 3 21 9 15 9"></polyline>
+                    <div class="history-actions-bar hidden" id="history-actions-bar">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="select-all-checkbox">
+                            <span>全选</span>
+                        </label>
+                        <span class="selected-count" id="selected-count">已选择 0 项</span>
+                        <button class="btn btn-danger btn-small" id="batch-delete-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                             </svg>
-                            <span>刷新</span>
+                            删除
                         </button>
-                        <div class="history-actions-bar hidden" id="history-actions-bar">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="select-all-checkbox">
-                                <span>全选</span>
-                            </label>
-                            <span class="selected-count" id="selected-count">已选择 0 项</span>
-                            <button class="btn btn-danger btn-small" id="batch-delete-btn">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
-                                    <polyline points="3 6 5 6 21 6"></polyline>
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                </svg>
-                                删除
-                            </button>
-                        </div>
                     </div>
+                    <button type="button" class="btn history-refresh-btn" id="refresh-history-btn" title="刷新下载状态" aria-label="刷新下载状态">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
+                            <polyline points="21 3 21 9 15 9"></polyline>
+                        </svg>
+                    </button>
                 </div>
                 <div class="card-content">
                     <div id="history-list" class="history-list">
@@ -550,6 +547,6 @@
         </div>
     </footer>
 
-    <script src="./js/app.js"></script>
+    <script src="./js/app.js?v=1.0.8"></script>
 </body>
 </html>

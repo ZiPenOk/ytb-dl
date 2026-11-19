@@ -448,22 +448,14 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
     padding: 10 24px;
     border-radius: 20px 20px 0 0;
 }
 
 #history-tab .card-header .card-title {
     margin-bottom: 0;
-}
-
-#history-tab .card-header .history-header-actions {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 12px;
-    margin-left: auto;
+    margin-right: auto;
 }
 
 #history-tab .card-header .history-actions-bar {
@@ -475,18 +467,33 @@ body {
     padding: 0;
     border: none;
     margin: 0;
-    margin-left: auto;
+    order: 2;
 }
 
 .history-refresh-btn {
-    flex: 0 0 auto;
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    padding: 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #fff;
+    color: #4b5563;
     box-shadow: none;
-    white-space: nowrap;
+    order: 3;
+}
+
+.history-refresh-btn:hover {
+    background: #f3f4f6;
+    color: #4f46e5;
+    transform: none;
+    box-shadow: none;
 }
 
 .history-refresh-btn svg {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     transition: transform 0.3s ease;
 }
 
@@ -1872,30 +1879,31 @@ body {
     #history-tab .card-header {
         background: white;
         border-radius: 16px;
-        padding: 0 12px;
+        padding: 10px 12px;
+        gap: 8px;
+        flex-wrap: wrap;
         margin: 0 0 7px 0;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
 
     #history-tab .card-title {
+        flex: 1 1 auto;
         font-size: 18px;
         font-weight: 600;
         color: #1f2937;
-        text-align: center;
+        text-align: left;
         margin: 0;
-        margin-bottom: 2px;
-    }
-
-    #history-tab .card-header .history-header-actions {
-        gap: 6px;
+        white-space: nowrap;
     }
 
     .history-refresh-btn {
-        width: 40px;
-        height: 40px;
+        flex-basis: 36px;
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
         padding: 0;
-        border-radius: 12px;
-        font-size: 0;
+        border-radius: 10px;
+        order: 2;
     }
 
     .history-refresh-btn svg {
@@ -1903,15 +1911,18 @@ body {
         height: 18px;
     }
 
-    .history-actions-bar {
+    #history-tab .card-header .history-actions-bar {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
-        padding: 4px 0;
+        padding: 8px 0 2px;
         background: transparent;
         border-radius: 0;
         margin: 0;
+        order: 3;
+        flex: 1 0 100%;
+        border-top: 1px solid #f1f5f9;
     }
 
     .history-actions-bar .checkbox-label {
