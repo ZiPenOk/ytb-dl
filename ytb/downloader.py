@@ -2,6 +2,7 @@ import yt_dlp
 import os
 import uuid
 import logging
+from hashlib import sha256
 from typing import Optional, Dict, Any
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -11,6 +12,28 @@ from .transcoder import FFmpegTranscoder
 
 # Setup logger
 logger = logging.getLogger(__name__)
+
+
+class _DownloadYoutubeDL(yt_dlp.YoutubeDL):
+    def __init__(self, params, download_dir: str):
+        try:
+            name_max = os.pathconf(download_dir, 'PC_NAME_MAX')
+        except (AttributeError, OSError, ValueError):
+            name_max = -1
+        # Leave space for extensions, stream/fragment suffixes and _transcoded.
+        self._title_byte_limit = min(name_max, 255) - 48 if name_max > 0 else 207
+        super().__init__(params)
+
+    def prepare_filename(self, info_dict, dir_type='', *, outtmpl=None, warn=False):
+        # Sanitize first so any expanded characters count toward the byte limit.
+        title = self.evaluate_outtmpl('%(title)s', info_dict, True)
+        title_bytes = title.encode('utf-8')
+        if len(title_bytes) > self._title_byte_limit:
+            identity = f"{info_dict.get('extractor_key', '')}\0{info_dict.get('id', '')}\0{title}"
+            suffix = f" [{sha256(identity.encode('utf-8')).hexdigest()[:12]}]"
+            prefix = title_bytes[:self._title_byte_limit - len(suffix)].decode('utf-8', errors='ignore')
+            info_dict = {**info_dict, 'title': prefix.rstrip() + suffix}
+        return super().prepare_filename(info_dict, dir_type, outtmpl=outtmpl, warn=warn)
 
 
 class YTDownloader:
@@ -444,7 +467,7 @@ class YTDownloader:
 
         def download():
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                with _DownloadYoutubeDL(ydl_opts, self.download_dir) as ydl:
                     info = ydl.extract_info(url, download=True)
                     filename = ydl.prepare_filename(info)
 
@@ -506,7 +529,7 @@ class YTDownloader:
 
                         try:
                             print(f"Retrying download after network error for: {url}")
-                            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            with _DownloadYoutubeDL(ydl_opts, self.download_dir) as ydl:
                                 info = ydl.extract_info(url, download=True)
                                 filename = ydl.prepare_filename(info)
                                 print(f"Retry download completed successfully for task {task_id}")
@@ -620,7 +643,7 @@ class YTDownloader:
 
                         try:
                             print(f"Retrying download with refreshed cookies for: {url}")
-                            with yt_dlp.YoutubeDL(fresh_opts) as ydl:
+                            with _DownloadYoutubeDL(fresh_opts, self.download_dir) as ydl:
                                 info = ydl.extract_info(url, download=True)
                                 filename = ydl.prepare_filename(info)
                                 print(f"Retry download completed successfully for task {task_id}")
@@ -690,7 +713,7 @@ class YTDownloader:
                                     'extract_flat': False,
                                 })
 
-                            with yt_dlp.YoutubeDL(fallback_opts) as ydl_fallback:
+                            with _DownloadYoutubeDL(fallback_opts, self.download_dir) as ydl_fallback:
                                 info = ydl_fallback.extract_info(url, download=True)
                                 filename = ydl_fallback.prepare_filename(info)
 
