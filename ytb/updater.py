@@ -36,6 +36,7 @@ class YtDlpUpdater:
     """Handle yt-dlp version checking and updates"""
 
     GITHUB_API_URL = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
+    PYPI_JSON_URL = "https://pypi.org/pypi/yt-dlp/json"
 
     def __init__(self):
         self.current_version = self._get_current_version()
@@ -44,49 +45,73 @@ class YtDlpUpdater:
         return yt_dlp.version.__version__
 
     async def check_for_updates(self) -> Dict[str, Any]:
-        """Check if a new version of yt-dlp is available"""
-        try:
-            async with httpx.AsyncClient() as client:
+        """Check PyPI for the latest yt-dlp release, falling back to GitHub."""
+        errors = []
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            headers={"User-Agent": "ytb-dl-updater"},
+            follow_redirects=True,
+        ) as client:
+            # PyPI is the same source the installer uses and has no strict
+            # anonymous request limit, unlike the GitHub API.
+            try:
+                response = await client.get(self.PYPI_JSON_URL)
+                response.raise_for_status()
+                data = response.json()
+                latest_version = str(data.get("info", {}).get("version", "")).strip()
+                if not latest_version:
+                    raise ValueError("PyPI response did not include a version")
+                files = data.get("releases", {}).get(latest_version) or []
+                release_date = files[0].get("upload_time_iso_8601", "") if files else ""
+                return self._build_update_result(
+                    latest_version,
+                    "",
+                    release_date,
+                    f"https://pypi.org/project/yt-dlp/{latest_version}/",
+                )
+            except Exception as error:
+                errors.append(f"PyPI: {error}")
+
+            try:
                 response = await client.get(self.GITHUB_API_URL)
                 response.raise_for_status()
-
                 latest_release = response.json()
-                latest_version = latest_release['tag_name']
-
-                # Remove 'v' prefix if present
-                if latest_version.startswith('v'):
+                latest_version = latest_release.get("tag_name", "")
+                if latest_version.startswith("v"):
                     latest_version = latest_version[1:]
+                return self._build_update_result(
+                    latest_version,
+                    latest_release.get("body", ""),
+                    latest_release.get("published_at", ""),
+                    latest_release.get("html_url", ""),
+                )
+            except Exception as error:
+                errors.append(f"GitHub: {error}")
 
-                # Compare versions
-                current_version = self._get_current_version()
-                current = version.parse(current_version)
-                latest = version.parse(latest_version)
+        message = "; ".join(errors)
+        logger.error(f"Failed to check for updates: {message}")
+        return {
+            "current_version": self._get_current_version(),
+            "error": f"Failed to check for updates: {message}",
+            "update_available": False,
+        }
 
-                update_available = latest > current
-
-                return {
-                    "current_version": current_version,
-                    "latest_version": latest_version,
-                    "update_available": update_available,
-                    "release_notes": latest_release.get('body', ''),
-                    "release_date": latest_release.get('published_at', ''),
-                    "download_url": latest_release.get('html_url', '')
-                }
-
-        except httpx.HTTPError as e:
-            logger.error(f"Failed to check for updates: {e}")
-            return {
-                "current_version": self._get_current_version(),
-                "error": f"Failed to check for updates: {str(e)}",
-                "update_available": False
-            }
-        except Exception as e:
-            logger.error(f"Unexpected error checking for updates: {e}")
-            return {
-                "current_version": self._get_current_version(),
-                "error": f"Unexpected error: {str(e)}",
-                "update_available": False
-            }
+    def _build_update_result(
+        self,
+        latest_version: str,
+        release_notes: str,
+        release_date: str,
+        download_url: str,
+    ) -> Dict[str, Any]:
+        current_version = self._get_current_version()
+        return {
+            "current_version": current_version,
+            "latest_version": latest_version,
+            "update_available": version.parse(latest_version) > version.parse(current_version),
+            "release_notes": release_notes,
+            "release_date": release_date,
+            "download_url": download_url,
+        }
 
     def update_yt_dlp(self) -> Dict[str, Any]:
         """Update yt-dlp to the latest version"""
