@@ -1,5 +1,6 @@
 import yt_dlp
 import os
+import re
 import uuid
 import logging
 import subprocess
@@ -823,21 +824,13 @@ class YTDownloader:
         """Read the existing display rotation in counter-clockwise degrees."""
         try:
             result = subprocess.run(
-                [
-                    'ffprobe',
-                    '-v', 'error',
-                    '-select_streams', 'v:0',
-                    '-show_entries', 'stream_side_data=rotation',
-                    '-of', 'csv=p=0',
-                    filepath,
-                ],
+                ['ffmpeg', '-hide_banner', '-i', filepath],
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
-            first_line = next((line for line in result.stdout.splitlines() if line.strip()), '')
-            value = first_line.strip().strip(',')
-            return int(float(value)) if value else 0
+            match = re.search(r'rotation of\s+(-?\d+(?:\.\d+)?)\s+degrees', result.stderr)
+            return int(round(float(match.group(1)))) if match else 0
         except Exception as error:
             logger.warning(f"Could not read display rotation for {filepath}: {error}")
             return 0
