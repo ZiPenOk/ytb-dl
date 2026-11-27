@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from typing import Any, Dict, Optional
@@ -55,9 +56,21 @@ class TelegramService:
             }
 
         try:
-            async with httpx.AsyncClient(timeout=20) as client:
-                response = await client.post(url, json=payload)
-                response.raise_for_status()
+            timeout = httpx.Timeout(20.0, connect=8.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                for delay in (1, 2, None):
+                    try:
+                        response = await client.post(url, json=payload)
+                        response.raise_for_status()
+                        break
+                    except (httpx.ConnectTimeout, httpx.ConnectError) as exc:
+                        if delay is None:
+                            raise
+                        logger.warning(
+                            "Telegram connection failed (%s); retrying in %ss",
+                            type(exc).__name__, delay,
+                        )
+                        await asyncio.sleep(delay)
             return True
         except httpx.HTTPStatusError as exc:
             logger.error(
