@@ -426,7 +426,10 @@ async def root():
     try:
         frontend_path = os.path.join(os.path.dirname(__file__), "frontend", "index.html")
         if os.path.exists(frontend_path):
-            return FileResponse(frontend_path)
+            return FileResponse(
+                frontend_path,
+                headers={"Cache-Control": "no-store, must-revalidate"},
+            )
         else:
             return {"message": "YouTube Downloader API", "version": "1.0.0", "error": "Frontend not found"}
     except Exception as e:
