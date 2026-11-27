@@ -29,7 +29,13 @@ class TelegramService:
     def allowed_chat_id(self) -> str:
         return str(self.config.get("chat_id", "")).strip()
 
-    async def send_message(self, text: str, chat_id: Optional[str] = None) -> bool:
+    async def send_message(
+        self,
+        text: str,
+        chat_id: Optional[str] = None,
+        *,
+        preview_url: Optional[str] = None,
+    ) -> bool:
         cfg = self.config
         bot_token = cfg.get("bot_token", "").strip()
         target_chat_id = str(chat_id if chat_id is not None else cfg.get("chat_id", "")).strip()
@@ -38,11 +44,15 @@ class TelegramService:
             return False
 
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        payload = {
+        payload: Dict[str, Any] = {
             "chat_id": target_chat_id,
             "text": text,
-            "disable_web_page_preview": False,
         }
+        if preview_url:
+            payload["link_preview_options"] = {
+                "is_disabled": False,
+                "url": preview_url,
+            }
 
         try:
             async with httpx.AsyncClient(timeout=20) as client:
@@ -145,7 +155,7 @@ class TelegramService:
             format_id=format_id,
             file_path=file_path,
         )
-        return await self.send_message(text)
+        return await self.send_message(text, preview_url=url)
 
     async def send_test(self) -> bool:
         return await self.send_message("🧪 YTB-DL 测试推送成功")
