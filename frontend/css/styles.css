@@ -243,6 +243,7 @@ body {
 
 .video-thumbnail-container {
     position: relative;
+    align-self: start;
     padding-top: 56.25%;
     background: #f3f4f6;
     border-radius: 8px;
@@ -330,7 +331,28 @@ body {
 }
 
 .rotation-section {
-    margin-top: 18px;
+    margin-top: 16px;
+}
+
+.rotation-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    color: #333;
+    cursor: pointer;
+    user-select: none;
+}
+
+.rotation-toggle input {
+    width: 18px;
+    height: 18px;
+    accent-color: #667eea;
+    cursor: pointer;
+}
+
+.rotation-controls {
+    margin-top: 12px;
 }
 
 .rotation-options {
@@ -362,14 +384,14 @@ body {
 }
 
 .rotation-preview {
-    display: flex;
-    gap: 14px;
-    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    max-width: 400px;
+    margin-top: 10px;
 }
 
 .rotation-preview-item {
-    flex: 1;
-    min-width: 0;
     margin: 0;
 }
 
@@ -378,7 +400,7 @@ body {
     align-items: center;
     justify-content: center;
     width: 100%;
-    aspect-ratio: 1 / 1;
+    height: 112px;
     background: #f3f4f6;
     border-radius: 8px;
     overflow: hidden;
@@ -402,6 +424,17 @@ body {
     margin-top: 8px;
     color: #9ca3af;
     font-size: 0.8rem;
+}
+
+.history-rotation-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    margin-right: 8px;
+    border-radius: 4px;
+    background: #ede9fe;
+    color: #5b21b6;
+    font-size: 0.85rem;
+    font-weight: 500;
 }
 
 /* Progress */

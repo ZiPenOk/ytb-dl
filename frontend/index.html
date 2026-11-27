@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube 视频下载器</title>
-    <link rel="stylesheet" href="./css/styles.css?v=1.0.13">
+    <link rel="stylesheet" href="./css/styles.css?v=1.0.14">
 </head>
 <body>
     <div class="container">
@@ -88,28 +88,32 @@
                             </div>
 
                             <div class="rotation-section" id="rotation-section">
-                                <span class="format-label">视频方向</span>
-                                <div class="rotation-options" id="rotation-options">
-                                    <button type="button" class="rotation-option active" data-rotation="0">不旋转</button>
-                                    <button type="button" class="rotation-option" data-rotation="90">顺时针 90°</button>
-                                    <button type="button" class="rotation-option" data-rotation="180">180°</button>
-                                    <button type="button" class="rotation-option" data-rotation="270">顺时针 270°</button>
+                                <label class="rotation-toggle">
+                                    <input type="checkbox" id="rotation-enabled">
+                                    <span>需要旋转画面</span>
+                                </label>
+                                <div class="rotation-controls hidden" id="rotation-controls">
+                                    <div class="rotation-options" id="rotation-options">
+                                        <button type="button" class="rotation-option active" data-rotation="90">顺时针 90°</button>
+                                        <button type="button" class="rotation-option" data-rotation="180">180°</button>
+                                        <button type="button" class="rotation-option" data-rotation="270">顺时针 270°</button>
+                                    </div>
+                                    <div class="rotation-preview">
+                                        <figure class="rotation-preview-item">
+                                            <div class="rotation-preview-frame">
+                                                <img id="rotation-preview-original" alt="原始封面">
+                                            </div>
+                                            <figcaption>原始</figcaption>
+                                        </figure>
+                                        <figure class="rotation-preview-item">
+                                            <div class="rotation-preview-frame">
+                                                <img id="rotation-preview-rotated" alt="旋转后预览">
+                                            </div>
+                                            <figcaption id="rotation-preview-caption">旋转后</figcaption>
+                                        </figure>
+                                    </div>
+                                    <p class="rotation-hint">预览用封面示意方向，视频会按所选角度保存。</p>
                                 </div>
-                                <div class="rotation-preview">
-                                    <figure class="rotation-preview-item">
-                                        <div class="rotation-preview-frame">
-                                            <img id="rotation-preview-original" alt="原始封面">
-                                        </div>
-                                        <figcaption>原始</figcaption>
-                                    </figure>
-                                    <figure class="rotation-preview-item">
-                                        <div class="rotation-preview-frame">
-                                            <img id="rotation-preview-rotated" alt="旋转后预览">
-                                        </div>
-                                        <figcaption id="rotation-preview-caption">旋转后</figcaption>
-                                    </figure>
-                                </div>
-                                <p class="rotation-hint">预览用封面示意方向，视频会按所选角度保存。</p>
                             </div>
                         </div>
                     </div>
@@ -572,6 +576,6 @@
         </div>
     </footer>
 
-    <script src="./js/app.js?v=1.0.13"></script>
+    <script src="./js/app.js?v=1.0.14"></script>
 </body>
 </html>

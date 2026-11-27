@@ -36,6 +36,8 @@ const elements = {
     videoViews: document.getElementById('video-views'),
     videoLikes: document.getElementById('video-likes'),
     formatSelect: document.getElementById('format-select'),
+    rotationEnabled: document.getElementById('rotation-enabled'),
+    rotationControls: document.getElementById('rotation-controls'),
     rotationOptions: document.getElementById('rotation-options'),
     rotationPreviewOriginal: document.getElementById('rotation-preview-original'),
     rotationPreviewRotated: document.getElementById('rotation-preview-rotated'),
@@ -184,6 +186,9 @@ function initEventListeners() {
     if (elements.rotationOptions) {
         elements.rotationOptions.addEventListener('click', handleRotationOptionClick);
     }
+    if (elements.rotationEnabled) {
+        elements.rotationEnabled.addEventListener('change', handleRotationToggle);
+    }
 
     // Settings event listeners
     elements.saveCookiesBtn.addEventListener('click', saveCookies);
@@ -284,6 +289,12 @@ function displayVideoInfo(videoData) {
     }
     if (elements.rotationPreviewRotated) {
         elements.rotationPreviewRotated.src = thumbnailUrl;
+    }
+    if (elements.rotationEnabled) {
+        elements.rotationEnabled.checked = false;
+    }
+    if (elements.rotationControls) {
+        elements.rotationControls.classList.add('hidden');
     }
     setRotation(0);
     elements.videoTitle.textContent = videoData.title || '未知标题';
@@ -603,6 +614,12 @@ function handleRotationOptionClick(event) {
     const button = event.target.closest('.rotation-option');
     if (!button) return;
     setRotation(button.dataset.rotation);
+}
+
+function handleRotationToggle() {
+    const enabled = elements.rotationEnabled.checked;
+    elements.rotationControls.classList.toggle('hidden', !enabled);
+    setRotation(enabled ? 90 : 0);
 }
 
 // Start Download
@@ -1336,6 +1353,7 @@ function displayHistory(history) {
                                 <span class="history-status status-${item.status}">
                                     ${getStatusText(item.status)}
                                 </span>
+                                ${Number(item.rotation) ? `<span class="history-rotation-badge">已旋转 ${item.rotation}°</span>` : ''}
                                 ${item.title}
                             </div>
                         </div>
@@ -1390,6 +1408,7 @@ function displayHistory(history) {
                             <span class="history-status status-${item.status}">
                                 ${getStatusText(item.status)}
                             </span>
+                            ${Number(item.rotation) ? `<span class="history-rotation-badge">已旋转 ${item.rotation}°</span>` : ''}
                             ${item.title}
                         </div>
                         <div class="history-meta">
