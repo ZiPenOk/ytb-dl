@@ -38,6 +38,8 @@ class DownloadRequest(BaseModel):
     url: str
     format_id: Optional[str] = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
     output_path: Optional[str] = None
+    # Clockwise rotation applied to the downloaded video: 0, 90, 180 or 270.
+    rotation: Optional[int] = 0
 
 
 class DownloadProgress(BaseModel):

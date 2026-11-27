@@ -8,6 +8,7 @@ console.log('API Base URL:', API_BASE_URL);
 let currentTaskId = null;
 let progressInterval = null;
 let ws = null;
+let selectedRotation = 0;
 
 // Store active download statuses for history display
 window.activeDownloadStatuses = {};
@@ -35,6 +36,10 @@ const elements = {
     videoViews: document.getElementById('video-views'),
     videoLikes: document.getElementById('video-likes'),
     formatSelect: document.getElementById('format-select'),
+    rotationOptions: document.getElementById('rotation-options'),
+    rotationPreviewOriginal: document.getElementById('rotation-preview-original'),
+    rotationPreviewRotated: document.getElementById('rotation-preview-rotated'),
+    rotationPreviewCaption: document.getElementById('rotation-preview-caption'),
 
     // Download Control Section
     downloadControl: document.getElementById('download-control'),
@@ -176,6 +181,10 @@ function initEventListeners() {
     elements.newDownloadBtn.addEventListener('click', resetDownload);
     elements.refreshHistoryBtn.addEventListener('click', refreshHistory);
 
+    if (elements.rotationOptions) {
+        elements.rotationOptions.addEventListener('click', handleRotationOptionClick);
+    }
+
     // Settings event listeners
     elements.saveCookiesBtn.addEventListener('click', saveCookies);
     elements.saveSettingsBtn.addEventListener('click', saveSettings);
@@ -266,11 +275,17 @@ async function fetchVideoInfo() {
 function displayVideoInfo(videoData) {
     // Update video details
     // 使用代理端点获取缩略图
-    if (videoData.thumbnail) {
-        elements.videoThumbnail.src = `${API_BASE_URL}/api/proxy-thumbnail?url=${encodeURIComponent(videoData.thumbnail)}`;
-    } else {
-        elements.videoThumbnail.src = '';
+    const thumbnailUrl = videoData.thumbnail
+        ? `${API_BASE_URL}/api/proxy-thumbnail?url=${encodeURIComponent(videoData.thumbnail)}`
+        : '';
+    elements.videoThumbnail.src = thumbnailUrl;
+    if (elements.rotationPreviewOriginal) {
+        elements.rotationPreviewOriginal.src = thumbnailUrl;
     }
+    if (elements.rotationPreviewRotated) {
+        elements.rotationPreviewRotated.src = thumbnailUrl;
+    }
+    setRotation(0);
     elements.videoTitle.textContent = videoData.title || '未知标题';
     elements.videoDescription.textContent = videoData.description || '';
     elements.videoAuthor.textContent = videoData.uploader || '未知作者';
@@ -561,6 +576,35 @@ function updateFormatSelect(formats) {
     }
 }
 
+// Rotation preview
+function setRotation(degrees) {
+    selectedRotation = ((Number(degrees) || 0) % 360 + 360) % 360;
+
+    if (elements.rotationOptions) {
+        elements.rotationOptions.querySelectorAll('.rotation-option').forEach((button) => {
+            button.classList.toggle('active', Number(button.dataset.rotation) === selectedRotation);
+        });
+    }
+
+    if (elements.rotationPreviewRotated) {
+        elements.rotationPreviewRotated.style.transform = selectedRotation
+            ? `rotate(${selectedRotation}deg)`
+            : '';
+    }
+
+    if (elements.rotationPreviewCaption) {
+        elements.rotationPreviewCaption.textContent = selectedRotation
+            ? `旋转后（顺时针 ${selectedRotation}°）`
+            : '旋转后';
+    }
+}
+
+function handleRotationOptionClick(event) {
+    const button = event.target.closest('.rotation-option');
+    if (!button) return;
+    setRotation(button.dataset.rotation);
+}
+
 // Start Download
 async function startDownload() {
     const url = elements.videoUrl.value.trim();
@@ -591,7 +635,8 @@ async function startDownload() {
             },
             body: JSON.stringify({
                 url,
-                format_id: formatId === 'best' ? null : formatId
+                format_id: formatId === 'best' ? null : formatId,
+                rotation: selectedRotation
             })
         });
 
@@ -736,6 +781,9 @@ function updateProgress(status) {
                 break;
             case 'merging':
                 elements.progressStatus.textContent = '正在合并音视频...';
+                break;
+            case 'rotating':
+                elements.progressStatus.textContent = '正在调整视频方向...';
                 break;
             case 'transcoding':
                 elements.progressStatus.textContent = '正在转码视频...';

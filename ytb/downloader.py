@@ -2,6 +2,7 @@ import yt_dlp
 import os
 import uuid
 import logging
+import subprocess
 from hashlib import sha256
 from typing import Optional, Dict, Any
 import asyncio
@@ -357,13 +358,20 @@ class YTDownloader:
         """Set a 403 notification callback for a specific task"""
         self.notification_callbacks[task_id] = callback
 
-    async def download_video_with_id(self, url: str, task_id: str, format_id: Optional[str] = None) -> str:
+    async def download_video_with_id(
+        self,
+        url: str,
+        task_id: str,
+        format_id: Optional[str] = None,
+        rotation: int = 0,
+    ) -> str:
         """Download video with pre-assigned task_id (for 403 callback setup)"""
 
         # Initialize download tracking
         self.active_downloads[task_id] = {
             'status': 'pending',
-            'progress': {'percent': 0}
+            'progress': {'percent': 0},
+            'rotation': int(rotation or 0) % 360,
         }
 
         # Set up download options - use config's default format with fallbacks
@@ -810,12 +818,89 @@ class YTDownloader:
             await callback(task_id, url, f"[网络错误] {status}", retry_count, final, success)
         # Otherwise, no notification for this task.
 
+    @staticmethod
+    def _probe_display_rotation(filepath: str) -> int:
+        """Read the existing display rotation in counter-clockwise degrees."""
+        try:
+            result = subprocess.run(
+                [
+                    'ffprobe',
+                    '-v', 'error',
+                    '-select_streams', 'v:0',
+                    '-show_entries', 'stream_side_data=rotation',
+                    '-of', 'csv=p=0',
+                    filepath,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            first_line = next((line for line in result.stdout.splitlines() if line.strip()), '')
+            value = first_line.strip().strip(',')
+            return int(float(value)) if value else 0
+        except Exception as error:
+            logger.warning(f"Could not read display rotation for {filepath}: {error}")
+            return 0
+
+    def _apply_rotation(self, task_id: str, filepath: str, clockwise_degrees: int) -> str:
+        """Set the video display rotation without re-encoding the streams."""
+        degrees = int(clockwise_degrees or 0) % 360
+        if degrees == 0:
+            return filepath
+
+        # ffmpeg's -display_rotation is counter-clockwise, so a clockwise value
+        # becomes negative. Existing rotation is preserved by adding it first.
+        existing = self._probe_display_rotation(filepath)
+        target = (existing - degrees + 180) % 360 - 180
+
+        stem, extension = os.path.splitext(filepath)
+        temp_path = f"{stem}.rotating{extension}"
+        command = [
+            'ffmpeg',
+            '-y',
+            '-hide_banner',
+            '-loglevel', 'error',
+            '-display_rotation', str(target),
+            '-i', filepath,
+            '-c', 'copy',
+            temp_path,
+        ]
+
+        logger.info(f"Applying {degrees} degree clockwise rotation to {filepath} (target {target})")
+        print(f"🔄 Rotating video {degrees}° clockwise...")
+        self.active_downloads[task_id]['status'] = 'processing'
+        self.active_downloads[task_id]['progress'] = {
+            'status': 'processing',
+            'percent': 100,
+            'phase': 'rotating',
+        }
+
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=600)
+            if result.returncode != 0 or not os.path.exists(temp_path):
+                raise RuntimeError(result.stderr.strip() or 'ffmpeg rotation failed')
+            os.replace(temp_path, filepath)
+            print(f"✅ Rotation applied to {os.path.basename(filepath)}")
+            return filepath
+        except Exception as error:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            logger.error(f"Failed to rotate {filepath}: {error}")
+            print(f"⚠️ Failed to rotate video, keeping original file: {error}")
+            self.active_downloads[task_id]['rotation_error'] = str(error)
+            return filepath
+
     def _finalize_download(self, task_id: str, filename: str, url: str):
         """Finalize download with optional transcoding"""
         filepath = os.path.abspath(filename)
 
         logger.info(f"Finalizing download for task {task_id}, file: {filepath}")
         print(f"🔍 Checking if transcoding is needed for: {filepath}")
+
+        rotation = self.active_downloads.get(task_id, {}).get('rotation', 0)
+        if rotation:
+            filepath = self._apply_rotation(task_id, filepath, rotation)
+            filename = filepath
 
         # Update transcoder config before checking
         self.transcoder.config = self.config.config

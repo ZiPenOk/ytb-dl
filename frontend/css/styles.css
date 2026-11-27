@@ -329,6 +329,81 @@ body {
     border-color: #667eea;
 }
 
+.rotation-section {
+    margin-top: 18px;
+}
+
+.rotation-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.rotation-option {
+    padding: 8px 12px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    background: white;
+    color: #374151;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: border-color 0.2s, background-color 0.2s, color 0.2s;
+}
+
+.rotation-option:hover {
+    border-color: #a5b4fc;
+}
+
+.rotation-option.active {
+    border-color: #667eea;
+    background: #eef2ff;
+    color: #4338ca;
+    font-weight: 600;
+}
+
+.rotation-preview {
+    display: flex;
+    gap: 14px;
+    margin-top: 12px;
+}
+
+.rotation-preview-item {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+}
+
+.rotation-preview-frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: #f3f4f6;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.rotation-preview-frame img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    transition: transform 0.25s ease;
+}
+
+.rotation-preview-item figcaption {
+    margin-top: 6px;
+    color: #6b7280;
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.rotation-hint {
+    margin-top: 8px;
+    color: #9ca3af;
+    font-size: 0.8rem;
+}
+
 /* Progress */
 .progress-info {
     display: flex;

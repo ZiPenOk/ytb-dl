@@ -459,6 +459,7 @@ async def start_download(request: DownloadRequest, source: str = "Web"):
         import uuid
         task_id = str(uuid.uuid4())
         selected_format_id = request.format_id
+        selected_rotation = int(request.rotation or 0) % 360
 
         # Set up 403/network error notification callback for Web downloads
         async def web_error_callback(task_id: str, url: str, status: str, retry_count: int = 0, final: bool = False, success: bool = False):
@@ -519,7 +520,8 @@ async def start_download(request: DownloadRequest, source: str = "Web"):
             "downloaded_at": datetime.now().isoformat(),
             "status": "downloading",
             "file_path": None,
-            "file_size": None
+            "file_size": None,
+            "rotation": selected_rotation,
         }
         history_manager.add_entry(history_entry)
 
@@ -527,7 +529,12 @@ async def start_download(request: DownloadRequest, source: str = "Web"):
         downloader.set_403_notification_callback(task_id, web_error_callback)
 
         # Start download with pre-assigned task_id
-        actual_task_id = await downloader.download_video_with_id(request.url, task_id, request.format_id)
+        actual_task_id = await downloader.download_video_with_id(
+            request.url,
+            task_id,
+            request.format_id,
+            rotation=selected_rotation,
+        )
 
         # Estimate file size for notification display
         estimated_size = None
@@ -738,12 +745,17 @@ async def redownload_video(task_id: str):
             "downloaded_at": datetime.now().isoformat(),
             "status": "downloading",
             "file_path": None,
-            "file_size": None
+            "file_size": None,
+            "rotation": int(entry.get("rotation") or 0) % 360,
         }
         history_manager.add_entry(history_entry)
 
         # Start download with new task_id
-        actual_task_id = await downloader.download_video_with_id(original_url, new_task_id)
+        actual_task_id = await downloader.download_video_with_id(
+            original_url,
+            new_task_id,
+            rotation=int(entry.get("rotation") or 0) % 360,
+        )
 
         # Start monitoring task for completion
         import asyncio
