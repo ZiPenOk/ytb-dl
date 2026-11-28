@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import re
 import time
 from typing import Any, Dict, Optional
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
@@ -156,10 +158,11 @@ class TelegramService:
         if status == "error" and not cfg.get("notify_on_error", True):
             return False
 
+        notification_url = self._download_notification_url(url)
         text = self._format_download_message(
             task_id=task_id,
             title=title,
-            url=url,
+            url=notification_url,
             status=status,
             source=source,
             video_info=video_info,
@@ -168,7 +171,27 @@ class TelegramService:
             format_id=format_id,
             file_path=file_path,
         )
-        return await self.send_message(text, preview_url=url)
+        return await self.send_message(text, preview_url=notification_url)
+
+    @staticmethod
+    def _download_notification_url(url: str) -> str:
+        """Use a YouTube short link for previews of standard watch URLs."""
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            return url
+
+        if (
+            parsed.scheme not in {"http", "https"}
+            or parsed.netloc.lower() not in {"youtube.com", "www.youtube.com", "m.youtube.com"}
+            or parsed.path != "/watch"
+        ):
+            return url
+
+        video_ids = parse_qs(parsed.query, keep_blank_values=True).get("v", [])
+        if len(video_ids) == 1 and re.fullmatch(r"[A-Za-z0-9_-]{11}", video_ids[0]):
+            return f"https://youtu.be/{video_ids[0]}"
+        return url
 
     async def send_test(self) -> bool:
         return await self.send_message("🧪 YTB-DL 测试推送成功")
